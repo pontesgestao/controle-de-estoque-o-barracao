@@ -1,19 +1,19 @@
 :root {
-  --laranja: #ED4400;
-  --laranja-escuro: #C23800;
-  --laranja-claro: #FFE3D3;
-  --azul: #273393;
-  --azul-claro: #E6E8F6;
-  --fundo: #FFF6EF;
+  --laranja: #C01012;
+  --laranja-escuro: #8F0A0C;
+  --laranja-claro: #FBE1E1;
+  --azul: #1C1C1C;
+  --azul-claro: #ECECEC;
+  --fundo: #FFF6F5;
   --cartao: #FFFFFF;
-  --texto: #2A1A12;
-  --texto-suave: #7A6558;
-  --borda: #F0DDD0;
+  --texto: #1E1515;
+  --texto-suave: #6E5B5A;
+  --borda: #EFDCDB;
   --verde: #1F8A4C;
   --verde-claro: #E2F4E9;
-  --erro: #B42318;
+  --erro: #B54708;
   --raio: 16px;
-  --sombra: 0 1px 2px rgba(80, 30, 0, .06), 0 4px 16px rgba(80, 30, 0, .06);
+  --sombra: 0 1px 2px rgba(60, 0, 0, .06), 0 4px 16px rgba(60, 0, 0, .06);
   color-scheme: light;
 }
 
@@ -63,7 +63,7 @@ button { cursor: pointer; }
 .btn-primario { background: var(--laranja); color: #fff; box-shadow: 0 4px 0 var(--laranja-escuro); }
 .btn-primario:active { box-shadow: 0 2px 0 var(--laranja-escuro); }
 .btn-secundario { background: var(--azul-claro); color: var(--azul); }
-.btn-azul { background: var(--azul); color: #fff; box-shadow: 0 4px 0 #1A2366; }
+.btn-azul { background: var(--azul); color: #fff; box-shadow: 0 4px 0 #000000; }
 .btn-texto { background: none; color: var(--azul); min-height: 44px; padding: 0 8px; text-decoration: underline; }
 .btn-bloco { width: 100%; }
 .pilha { display: flex; flex-direction: column; gap: 12px; }
@@ -135,7 +135,7 @@ button { cursor: pointer; }
   flex: 0 0 44px; width: 44px; height: 48px; padding: 0; border: 0; background: var(--laranja-claro); color: var(--laranja-escuro);
   font-size: 1.4rem; font-weight: 800; line-height: 1;
 }
-.contador-qtd button:active { background: #FFCDB0; }
+.contador-qtd button:active { background: #F5C4C4; }
 .contador-qtd input {
   flex: 0 0 64px; width: 64px; min-width: 0; height: 48px; padding: 0; border: 0; text-align: center; font-size: 1.15rem; font-weight: 800;
   outline: none; background: transparent; -moz-appearance: textfield;
@@ -148,7 +148,7 @@ button { cursor: pointer; }
   background: var(--azul-claro); color: var(--azul); border: 2px solid var(--azul);
   box-shadow: var(--sombra);
 }
-.btn-pular:active { background: #D3D7F0; }
+.btn-pular:active { background: #D6D6D6; }
 .btn-pular .icone { font-size: 1.6rem; line-height: 1; }
 .btn-pular strong { display: block; font-size: 1.05rem; font-weight: 800; }
 .btn-pular small { display: block; font-size: .85rem; color: var(--texto-suave); font-weight: 600; }
@@ -166,7 +166,7 @@ button { cursor: pointer; }
 }
 .forma button[aria-checked="true"] { border-color: var(--laranja); background: var(--laranja); color: #fff; }
 .forma button[data-modo="zero"][aria-checked="true"] { border-color: var(--texto-suave); background: var(--texto-suave); }
-.item.modo-nenhum .forma button { border-color: #F5C7AE; }
+.item.modo-nenhum .forma button { border-color: #EFC2C2; }
 
 .campos { display: none; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--fundo); }
 .item.modo-un .campos-un, .item.modo-cx .campos-cx { display: flex; }
@@ -178,7 +178,7 @@ button { cursor: pointer; }
   text-align: center; font-weight: 800; font-size: 1.15rem; outline: none;
 }
 .campo-curto:focus { border-color: var(--laranja); }
-.conta { margin: 0; padding: 10px 12px; border-radius: 10px; background: #FFF3E0; color: var(--laranja-escuro); font-size: .9rem; text-align: center; }
+.conta { margin: 0; padding: 10px 12px; border-radius: 10px; background: #FDECEC; color: var(--laranja-escuro); font-size: .9rem; text-align: center; }
 .conta.pronta { background: var(--verde-claro); color: var(--verde); }
 .conta strong { font-size: 1.1rem; }
 .conta small { color: var(--texto-suave); }

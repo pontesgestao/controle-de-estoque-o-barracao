@@ -1,4 +1,4 @@
-# Controle de estoque Fast Shake
+# Controle de estoque O Barracão
 
 App de contagem de estoque para os gerentes das unidades. Funciona no navegador do celular ou do computador, sem instalar nada.
 
@@ -29,7 +29,7 @@ A planilha recebe duas abas:
 ## Configuração (uma vez só, ~5 minutos)
 
 ### 1. Criar a planilha
-1. Acesse [sheets.new](https://sheets.new) com a sua conta Google e dê o nome **Estoque Fast Shake**.
+1. Acesse [sheets.new](https://sheets.new) com a sua conta Google e dê o nome **Estoque O Barracão**.
 2. Menu **Extensões → Apps Script**.
 
 ### 2. Colar o código e publicar
@@ -61,7 +61,7 @@ Todos os produtos estão em [`js/produtos.js`](js/produtos.js), na ordem do pass
 
 ```
 index.html            página do app
-css/estilo.css        identidade visual (laranja #ED4400 e azul #273393 da marca)
+css/estilo.css        identidade visual (vermelho #C01012 e preto #1C1C1C da marca)
 js/config.js          endereço da planilha e lista de unidades
 js/produtos.js        categorias e produtos
 js/app.js             passo a passo, progresso e envio

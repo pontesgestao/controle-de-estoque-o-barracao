@@ -1,12 +1,12 @@
 (function () {
   'use strict';
 
-  const CHAVE_RASCUNHO = 'fastshake-contagem-v2';
-  const CHAVE_EMBALAGENS = 'fastshake-embalagens-v1';
-  const CHAVE_NAO_TRABALHA = 'fastshake-nao-trabalha-v1';
-  const CHAVE_PERFIL = 'fastshake-perfil-v1';
-  const CHAVE_ULTIMA = 'fastshake-ultima-v1';
-  const CHAVE_PRODUTOS_NOVOS = 'fastshake-produtos-novos-v1';
+  const CHAVE_RASCUNHO = 'obarracao-contagem-v2';
+  const CHAVE_EMBALAGENS = 'obarracao-embalagens-v1';
+  const CHAVE_NAO_TRABALHA = 'obarracao-nao-trabalha-v1';
+  const CHAVE_PERFIL = 'obarracao-perfil-v1';
+  const CHAVE_ULTIMA = 'obarracao-ultima-v1';
+  const CHAVE_PRODUTOS_NOVOS = 'obarracao-produtos-novos-v1';
   const app = document.getElementById('app');
 
   // Produtos criados no Painel DRE (aba "Produtos novos" da planilha) entram
@@ -154,7 +154,7 @@
 
     app.innerHTML = `
       <section class="inicio">
-        <img class="logo" src="img/logo.png" alt="Fast Shake">
+        <img class="logo" src="img/logo.png" alt="O Barracão">
         <div class="faixa-titulo">
           <h1>Contagem de estoque</h1>
           <p>Preencha categoria por categoria. Seu progresso fica salvo neste aparelho.</p>
@@ -645,7 +645,7 @@
     const data = new Date(dados.enviadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
     app.innerHTML = `
       <section class="sucesso">
-        <img class="logo" src="img/logo.png" alt="Fast Shake">
+        <img class="logo" src="img/logo.png" alt="O Barracão">
         <div class="selo" aria-hidden="true">✓</div>
         <h1>Contagem enviada!</h1>
         <p><strong>${esc(dados.unidade)}</strong> · ${esc(dados.responsavel)}<br>${data}</p>

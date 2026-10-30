@@ -7,8 +7,8 @@
     'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
     'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js',
   ];
-  const LARANJA = [237, 68, 0];
-  const AZUL = [39, 51, 147];
+  const LARANJA = [192, 16, 18];
+  const AZUL = [28, 28, 28];
   const TEXTO = [42, 26, 18];
   const SUAVE = [122, 101, 88];
   const VERMELHO = [180, 35, 24];
@@ -159,7 +159,7 @@
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(...SUAVE);
-        doc.text(limpar(`Fast Shake · ${dados.unidade} · ${dataHora(dados.enviadoEm)}`), margem, alt - 8);
+        doc.text(limpar(`O Barracão · ${dados.unidade} · ${dataHora(dados.enviadoEm)}`), margem, alt - 8);
         doc.text(`Página ${doc.internal.getNumberOfPages()}`, larg - margem, alt - 8, { align: 'right' });
       },
     });
@@ -195,7 +195,7 @@
   // Abre o menu de compartilhar do celular com o PDF anexado. Onde isso não
   // existe (computador), baixa o PDF e abre o WhatsApp com um resumo em texto.
   async function compartilhar(arquivo, dados) {
-    const texto = `Contagem de estoque Fast Shake\nLoja: ${dados.unidade}\nPreenchido por: ${dados.responsavel}\nData: ${dataHora(dados.enviadoEm)}`;
+    const texto = `Contagem de estoque O Barracão\nLoja: ${dados.unidade}\nPreenchido por: ${dados.responsavel}\nData: ${dataHora(dados.enviadoEm)}`;
     if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
       try {
         await navigator.share({ files: [arquivo], title: arquivo.name, text: texto });

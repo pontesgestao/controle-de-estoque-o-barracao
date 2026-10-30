@@ -1,5 +1,5 @@
 /**
- * Recebe as contagens do app Fast Shake e grava na planilha.
+ * Recebe as contagens do app O Barracão e grava na planilha.
  * Cole este código em Extensões > Apps Script da sua planilha (veja o README).
  */
 
@@ -78,7 +78,7 @@ function doGet(e) {
       .map(function (r) { return { categoria: String(r[0]).trim(), produto: String(r[1]).trim() }; });
     return responder({ ok: true, produtos: produtos });
   }
-  return responder({ ok: true, app: 'Contagem Fast Shake' });
+  return responder({ ok: true, app: 'Contagem O Barracão' });
 }
 
 // Rode uma vez pelo editor para criar as abas formatadas.
@@ -99,14 +99,14 @@ function obterAba(ss, nome, cabecalho) {
     if (nome === ABA_RESUMO && atual.slice(0, 8).every(function (c, i) { return c === cabecalho[i] || i === 3; })) {
       // Resumo antigo: só acrescenta a coluna nova no fim.
       aba.getRange(1, 1, 1, cabecalho.length).setValues([cabecalho])
-        .setFontWeight('bold').setBackground('#ED4400').setFontColor('#FFFFFF');
+        .setFontWeight('bold').setBackground('#C01012').setFontColor('#FFFFFF');
       return aba;
     }
     aba.setName(nome + ' (formato antigo ' + Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'dd-MM-yyyy') + ')');
   }
   aba = ss.insertSheet(nome, 0);
   aba.getRange(1, 1, 1, cabecalho.length).setValues([cabecalho])
-    .setFontWeight('bold').setBackground('#ED4400').setFontColor('#FFFFFF').setWrap(true);
+    .setFontWeight('bold').setBackground('#C01012').setFontColor('#FFFFFF').setWrap(true);
   aba.setFrozenRows(1);
   aba.getRange('A:A').setNumberFormat('dd/MM/yyyy HH:mm');
   aba.setColumnWidths(1, cabecalho.length, 130);

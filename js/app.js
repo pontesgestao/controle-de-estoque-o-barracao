@@ -18,7 +18,7 @@
     (extras || []).forEach((p) => {
       let cat = lista.find((c) => c.nome.toLowerCase() === p.categoria.toLowerCase());
       if (!cat) { cat = { nome: p.categoria, itens: [] }; lista.push(cat); }
-      if (!cat.itens.some((it) => it.nome.toLowerCase() === p.produto.toLowerCase())) cat.itens.push({ nome: p.produto, medida: 'un' });
+      if (!cat.itens.some((it) => it.nome.toLowerCase() === p.produto.toLowerCase())) cat.itens.push({ nome: p.produto, medida: /\(kg\)\s*$/i.test(p.produto) ? 'kg' : 'un' });
     });
     return lista.map((cat) => ({
       nome: cat.nome,
@@ -96,11 +96,17 @@
     return null;
   }
 
+  // Itens com medida 'kg' são contados por peso: a quantidade é em kg e a
+  // embalagem fechada é sempre um pacote com tantos kg.
+  function porPeso(it) { return it.medida === 'kg'; }
+  function unidade(it) { return porPeso(it) ? 'kg' : 'un'; }
+
   const EMBALAGENS = { caixa: 'caixas', pacote: 'pacotes', fardo: 'fardos', 'pacote grande': 'pacotes grandes' };
-  function embalagem(it) { return EMBALAGENS[it.medida] ? it.medida : 'caixa/pacote'; }
-  function embalagens(it) { return EMBALAGENS[it.medida] || 'caixas/pacotes'; }
+  function embalagem(it) { return porPeso(it) ? 'pacote' : EMBALAGENS[it.medida] ? it.medida : 'caixa/pacote'; }
+  function embalagens(it) { return porPeso(it) ? 'pacotes' : EMBALAGENS[it.medida] || 'caixas/pacotes'; }
 
   function perguntaFechadas(it) {
+    if (porPeso(it)) return 'Quantos <strong>pacotes fechados</strong>?';
     if (it.medida === 'caixa') return 'Quantas <strong>caixas fechadas</strong>?';
     if (EMBALAGENS[it.medida]) return `Quantos <strong>${embalagens(it)} fechados</strong>?`;
     return 'Quantas <strong>caixas ou pacotes fechados</strong>?';
@@ -110,12 +116,13 @@
   function descrever(it, v) {
     if (v.modo === 'zero') return 'Zero';
     if (v.modo === 'nt') return 'Não trabalha com este produto';
-    if (v.modo === 'un') return `${formatar(lerNumero(v.q))} un`;
+    const u = unidade(it);
+    if (v.modo === 'un') return `${formatar(lerNumero(v.q))} ${u}`;
     if (v.modo === 'cx') {
       const cx = lerNumero(v.cx) || 0;
       const s = lerNumero(v.s) || 0;
-      return `${formatar(cx)} ${cx === 1 ? embalagem(it) : embalagens(it)} × ${formatar(lerNumero(v.por))}` +
-        (s ? ` + ${formatar(s)} soltas` : '') + ` = ${formatar(totalUnidades(v))} un`;
+      return `${formatar(cx)} ${cx === 1 ? embalagem(it) : embalagens(it)} × ${formatar(lerNumero(v.por))}${porPeso(it) ? ' kg' : ''}` +
+        (s ? ` + ${formatar(s)} ${porPeso(it) ? 'kg soltos' : 'soltas'}` : '') + ` = ${formatar(totalUnidades(v))} ${u}`;
     }
     return '';
   }
@@ -148,7 +155,7 @@
     const campoUnidade = unidades.length
       ? `<select id="unidade" required>
            <option value="">Selecione a unidade</option>
-           ${unidades.map((u) => `<option ${u === perfil.unidade ? 'selected' : ''}>${esc(u)}</option>`).join('')}
+           ${unidades.map((u) => `<option ${u === perfil.unidade || unidades.length === 1 ? 'selected' : ''}>${esc(u)}</option>`).join('')}
          </select>`
       : `<input id="unidade" type="text" autocomplete="organization" placeholder="Ex.: Loja Centro" value="${esc(perfil.unidade || '')}" required>`;
 
@@ -244,7 +251,7 @@
     return `
       <header class="topo">
         <div class="topo-linha">
-          <div class="marca"><span>FAST</span><span class="tag-azul">SHAKE</span><span class="loja">· ${esc(estado.unidade)}</span></div>
+          <div class="marca"><span>O</span><span class="tag-azul">BARRACÃO</span>${(window.CONFIG.UNIDADES || []).length === 1 ? '' : `<span class="loja">· ${esc(estado.unidade)}</span>`}</div>
           <div class="porcentagem" id="pct">${p}%</div>
         </div>
         <div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}" id="barra"><div style="width:${p}%"></div></div>
@@ -289,6 +296,7 @@
   function htmlItem(it) {
     const v = valor(it.id);
     const modo = v.modo || 'nenhum';
+    const kg = porPeso(it);
     const opcao = (m, texto) =>
       `<button type="button" role="radio" data-modo="${m}" aria-checked="${v.modo === m}">${texto}</button>`;
     return `
@@ -299,32 +307,32 @@
           <button type="button" class="link-nt" data-nt="sim">Não trabalho com este produto</button>
         </div>
         <div class="forma" role="radiogroup" aria-label="Como você contou ${esc(it.nome)}?">
-          ${opcao('un', 'Unidade')}
-          ${opcao('cx', 'Caixa, fardo<br>ou pacote')}
+          ${kg ? opcao('un', 'Peso<br>(kg)') : opcao('un', 'Unidade')}
+          ${kg ? opcao('cx', 'Pacote<br>fechado') : opcao('cx', 'Caixa, fardo<br>ou pacote')}
           ${opcao('zero', 'Não tem<br>(zero)')}
         </div>
 
         <div class="campos campos-un">
           <div class="linha">
-            <label>Quantas <strong>unidades</strong>?</label>
-            ${htmlContador('q', `Unidades de ${it.nome}`, v.q)}
+            <label>${kg ? 'Quantos <strong>kg</strong>?' : 'Quantas <strong>unidades</strong>?'}</label>
+            ${htmlContador('q', `${kg ? 'Quilos' : 'Unidades'} de ${it.nome}`, v.q)}
           </div>
         </div>
 
         <div class="campos campos-cx">
           <div class="linha">
-            <label>Quantas unidades vêm em <strong>cada ${esc(embalagem(it))}</strong>?</label>
-            <input class="campo-curto" type="text" inputmode="numeric" autocomplete="off" placeholder="?"
-                   value="${esc(v.por || '')}" data-campo="por" aria-label="Unidades em cada ${esc(embalagem(it))} de ${esc(it.nome)}">
+            <label>Quant${kg ? 'os <strong>kg</strong>' : 'as unidades'} vêm em <strong>cada ${esc(embalagem(it))}</strong>?</label>
+            <input class="campo-curto" type="text" inputmode="${kg ? 'decimal' : 'numeric'}" autocomplete="off" placeholder="?"
+                   value="${esc(v.por || '')}" data-campo="por" aria-label="${kg ? 'Quilos' : 'Unidades'} em cada ${esc(embalagem(it))} de ${esc(it.nome)}">
           </div>
           <div class="linha">
             <label>${perguntaFechadas(it)}</label>
             ${htmlContador('cx', `${embalagens(it)} fechados de ${it.nome}`, v.cx)}
           </div>
           <div class="linha">
-            <label>Unidades <strong>soltas</strong> <small>(se tiver)</small></label>
-            <input class="campo-curto" type="text" inputmode="numeric" autocomplete="off" placeholder="0"
-                   value="${esc(v.s || '')}" data-campo="s" aria-label="Unidades soltas de ${esc(it.nome)}">
+            <label>${kg ? '<strong>Kg soltos</strong>' : 'Unidades <strong>soltas</strong>'} <small>(se tiver)</small></label>
+            <input class="campo-curto" type="text" inputmode="${kg ? 'decimal' : 'numeric'}" autocomplete="off" placeholder="0"
+                   value="${esc(v.s || '')}" data-campo="s" aria-label="${kg ? 'Quilos soltos' : 'Unidades soltas'} de ${esc(it.nome)}">
           </div>
           <p class="conta" data-conta></p>
         </div>
@@ -429,9 +437,9 @@
       li.querySelectorAll('[data-modo]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.modo === v.modo)));
       const conta = li.querySelector('[data-conta]');
       if (v.modo === 'cx') {
-        if (!(lerNumero(v.por) > 0)) conta.innerHTML = `Informe quantas unidades vêm em cada ${esc(embalagem(it))}.`;
+        if (!(lerNumero(v.por) > 0)) conta.innerHTML = `Informe quant${porPeso(it) ? 'os kg' : 'as unidades'} vêm em cada ${esc(embalagem(it))}.`;
         else if (lerNumero(v.cx) === null) conta.innerHTML = `Informe quantas embalagens fechadas você contou.`;
-        else conta.innerHTML = `Total: <strong>${formatar(totalUnidades(v))} unidades</strong><br><small>${esc(descrever(it, v))}</small>`;
+        else conta.innerHTML = `Total: <strong>${formatar(totalUnidades(v))} ${porPeso(it) ? 'kg' : 'unidades'}</strong><br><small>${esc(descrever(it, v))}</small>`;
         conta.classList.toggle('pronta', itemCompleto(id));
       }
     }
@@ -521,6 +529,7 @@
   // ---------- Revisão e envio ----------
   function montarEnvio() {
     const FORMAS = { un: 'Unidade', cx: 'Caixa/fardo/pacote', zero: 'Zero' };
+    const FORMAS_KG = { un: 'Peso (kg)', cx: 'Pacote (kg)', zero: 'Zero' };
     const itens = [];
     categorias.forEach((c, ci) => c.itens.forEach((it) => {
       const v = pulada(ci) ? {} : valor(it.id);
@@ -529,7 +538,7 @@
         categoria: c.nome,
         produto: it.nome,
         situacao: pulada(ci) ? 'Não contada' : (v.modo === 'nt' ? 'Não trabalha' : 'Contada'),
-        forma: FORMAS[v.modo] || '',
+        forma: (porPeso(it) ? FORMAS_KG : FORMAS)[v.modo] || '',
         descricao: pulada(ci) ? 'Não contada hoje' : descrever(it, v),
         embalagem: v.modo === 'cx' ? embalagem(it) : '',
         embalagens: v.modo === 'cx' ? lerNumero(v.cx) : '',
@@ -539,7 +548,7 @@
         // Campos do formato anterior, para a planilha não quebrar antes de o
         // Apps Script ser atualizado.
         quantidade: total,
-        medida: 'un',
+        medida: unidade(it),
         avulsas: '',
       });
     }));
@@ -572,7 +581,7 @@
           const total = totalUnidades(v);
           return `<dt>${esc(it.nome)}${v.modo === 'cx' ? `<small>${esc(descrever(it, v).split(' = ')[0])}</small>` : ''}</dt>
                   <dd class="${total === 0 ? 'zero' : ''}${v.modo === 'nt' ? 'nt' : ''}">${
-                    v.modo === 'zero' ? 'Zero' : v.modo === 'nt' ? 'Não trabalha' : `${formatar(total)} un`}</dd>`;
+                    v.modo === 'zero' ? 'Zero' : v.modo === 'nt' ? 'Não trabalha' : `${formatar(total)} ${unidade(it)}`}</dd>`;
         }).join('')}</dl>`}
       </article>`).join('');
 
@@ -580,7 +589,7 @@
       ${htmlTopo('revisao')}
       <section class="conteudo">
         <div class="cabecalho-categoria"><h2>Revisar e enviar</h2></div>
-        <p class="dica">Confira os totais <strong>em unidades</strong>. Itens zerados aparecem em vermelho. Toque em <strong>Corrigir</strong> para ajustar.</p>
+        <p class="dica">Confira os totais <strong>em unidades ou kg</strong>. Itens zerados aparecem em vermelho. Toque em <strong>Corrigir</strong> para ajustar.</p>
         ${blocos}
         <div class="cartao">
           <div class="campo">

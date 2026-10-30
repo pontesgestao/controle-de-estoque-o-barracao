@@ -6,7 +6,6 @@ window.CONFIG = {
   // Nomes das lojas que aparecem para o gerente escolher.
   // Se ficar vazio, o gerente digita o nome da unidade.
   UNIDADES: [
-    'Loja 01 - Violim',
-    'Loja 02 - Vivi Xavier',
+    'O Barracão',
   ],
 };

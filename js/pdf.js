@@ -9,8 +9,8 @@
   ];
   const LARANJA = [192, 16, 18];
   const AZUL = [28, 28, 28];
-  const TEXTO = [42, 26, 18];
-  const SUAVE = [122, 101, 88];
+  const TEXTO = [30, 21, 21];
+  const SUAVE = [110, 91, 90];
   const VERMELHO = [180, 35, 24];
 
   let libsCarregadas = null;
@@ -135,9 +135,9 @@
         return;
       }
       const zerado = i.totalUnidades === 0;
-      const como = i.forma === 'Caixa/fardo/pacote' ? i.descricao.split(' = ')[0] : i.forma;
+      const como = i.forma === 'Caixa/fardo/pacote' || i.forma === 'Pacote (kg)' ? i.descricao.split(' = ')[0] : i.forma;
       corpo.push([limpar(i.produto), { content: limpar(como), zerado },
-        { content: zerado ? '0 un' : `${numero(i.totalUnidades)} un`, zerado }]);
+        { content: zerado ? `0 ${i.medida || 'un'}` : `${numero(i.totalUnidades)} ${i.medida || 'un'}`, zerado }]);
     });
 
     doc.autoTable({

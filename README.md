@@ -57,6 +57,8 @@ Na mesma tela, preencha os nomes das lojas em `UNIDADES` (ex.: `['Loja Centro', 
 
 Todos os produtos estão em [`js/produtos.js`](js/produtos.js), na ordem do passo a passo. Para incluir, remover ou renomear um item, edite só esse arquivo.
 
+Carnes, laticínios, hortifrúti e preparos são contados **por peso**: o nome termina em **(kg)** e o item usa `medida: 'kg'`. No app, o gerente escolhe "Peso (kg)" ou "Pacote fechado" (informando quantos kg vêm em cada pacote). Na planilha, a coluna "Total (unidades)" desses itens fica em kg. Um produto criado no Painel DRE com "(kg)" no fim do nome também é contado por peso.
+
 ## Estrutura
 
 ```

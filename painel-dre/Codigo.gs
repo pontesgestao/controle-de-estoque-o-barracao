@@ -288,6 +288,10 @@ function lerNota(fotos, catalogo) {
     'Peso e volume NÃO são unidades: "7,0 KG", "1,3 KG", "2 L" descrevem o tamanho de uma unidade. ' +
     'Use 1 quando a unidade da nota já é a própria unidade contada (UN, GL/galão, BD/balde, LT/lata, FR/frasco). ' +
     'Use 0 quando não der para saber.\n' +
+    'EXCEÇÃO — produtos por peso: os produtos do catálogo com "(kg)" no fim do nome são controlados em QUILOS. ' +
+    'Para eles, unidadesPorEmbalagem é quantos kg vêm em cada embalagem da nota: use 1 quando a nota já vende em KG ' +
+    '(ex.: "ALCATRA KG", 3,250 KG → quantidade 3,25 e unidadesPorEmbalagem 1); quando a nota vende em pacotes, caixas ' +
+    'ou fardos, informe os kg de cada um (ex.: "ARROZ 5KG", 4 UN → unidadesPorEmbalagem 5; "FD 6X5KG", 2 FD → 30).\n' +
     '- valorTotal: o valor total do item na nota (coluna de valor total do produto, com descontos do item), em reais, sem impostos destacados.\n' +
     '- ipi: o valor de IPI do item, se estiver na linha do item; senão 0.\n' +
     '- icmsSt: o valor de ICMS-ST (substituição tributária) do item, se estiver na linha ou na descrição do item ' +

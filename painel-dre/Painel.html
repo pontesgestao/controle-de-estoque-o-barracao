@@ -463,7 +463,7 @@
           <input type="search" id="busca-produto" placeholder="Buscar produto…" style="max-width:260px" value="${esc(buscaProduto)}"></div>
         <div class="tabela-wrap"><table>
           <thead><tr><th>Produto</th><th class="r">Est. inicial (un)</th><th class="r">Compras (un)</th><th class="r">Est. final (un)</th>
-            <th class="r">Consumo (un)</th><th class="r">Custo un.</th><th class="r">CMV</th></tr></thead>
+            <th class="r">Consumo (un. ou kg)</th><th class="r">Custo un.</th><th class="r">CMV</th></tr></thead>
           <tbody id="tabela-produtos"></tbody>
         </table></div>
       </div>`;
@@ -588,9 +588,9 @@
       ${n.itens.length ? `
       <div class="cartao">
         <h2>Conferir itens</h2>
-        <p class="dica">Confira o produto, as embalagens e quantas unidades vêm em cada uma. Linhas em amarelo precisam de atenção.</p>
+        <p class="dica">Confira o produto, as embalagens e quantas unidades vêm em cada uma (nos produtos "(kg)", quantos kg). Linhas em amarelo precisam de atenção.</p>
         <div class="tabela-wrap"><table class="itens-nota">
-          <thead><tr><th>Item da nota</th><th>Produto do estoque</th><th class="r">Embalagens</th><th class="r">Unid./emb.</th><th class="r">Total un.</th><th class="r">Valor (R$)</th><th class="r">Custo un.</th><th></th></tr></thead>
+          <thead><tr><th>Item da nota</th><th>Produto do estoque</th><th class="r">Embalagens</th><th class="r">Unid. ou kg/emb.</th><th class="r">Total (un. ou kg)</th><th class="r">Valor (R$)</th><th class="r">Custo un.</th><th></th></tr></thead>
           <tbody>${n.itens.map((it, i) => {
             const fora = it.produto === '__fora__';
             const emb = numeroSimples(it.embalagens), por = numeroSimples(it.porEmbalagem), val = numero(it.valor);
@@ -601,7 +601,7 @@
                 ${it.unidadeNota ? `<div class="desc">Na nota: ${qtd(it.quantidadeNota)} ${esc(it.unidadeNota)}${it.confianca ? ' · confiança ' + esc(it.confianca) : ''}${it.impostos ? ` · inclui ${dinheiro(it.impostos)} de impostos` : ''}</div>` : ''}</td>
               <td><select data-campo="produto">${opcoesProduto(it.produto)}</select></td>
               <td class="r"><input class="num" style="width:80px;text-align:right" type="text" inputmode="decimal" data-campo="embalagens" value="${esc(it.embalagens)}" ${fora ? 'disabled' : ''}></td>
-              <td class="r"><input class="num" style="width:80px;text-align:right" type="text" inputmode="numeric" data-campo="porEmbalagem" value="${esc(it.porEmbalagem)}" ${fora ? 'disabled' : ''} placeholder="?"></td>
+              <td class="r"><input class="num" style="width:80px;text-align:right" type="text" inputmode="decimal" data-campo="porEmbalagem" value="${esc(it.porEmbalagem)}" ${fora ? 'disabled' : ''} placeholder="?"></td>
               <td class="r num">${fora ? '–' : qtd(un)}</td>
               <td class="r"><input class="num" style="width:100px;text-align:right" type="text" inputmode="decimal" data-campo="valor" value="${esc(it.valor)}"></td>
               <td class="r num">${!fora && un && val != null ? dinheiro(val / un) : '–'}</td>
@@ -811,6 +811,7 @@
           </select></label>
         <label class="campo" id="np-nova-cat" hidden>Nome da nova categoria<input type="text" id="np-categoria-nova"></label>
         <label class="campo">Nome do produto<input type="text" id="np-nome" value="${esc(sug.nome)}"></label>
+        <p class="dica">Se o produto for contado por peso (carne, frios, hortifrúti), termine o nome com <strong>(kg)</strong>. Ex.: Cupim (kg).</p>
         <p class="alerta">Para o estoque deste produto ser contado nas lojas, ele também precisa entrar no app de contagem.</p>
         <div class="botoes-dialogo">
           <button class="btn btn-azul" value="ok" id="np-ok">Criar produto</button>
@@ -886,7 +887,7 @@
     const semCusto = linhas.filter((l) => !l.atual).length;
     conteudo.innerHTML = `
       <div class="cartao">
-        <div class="linha-titulo"><h2>Custo por unidade</h2>
+        <div class="linha-titulo"><h2>Custo por unidade (ou por kg)</h2>
           <input type="search" id="busca-custo" placeholder="Buscar produto…" style="max-width:260px"></div>
         <p class="dica">O custo é atualizado sozinho a cada compra lançada. Use esta tela para o custo inicial ou para corrigir um valor.
           ${semCusto ? `<span class="tag erro">${semCusto} produto(s) sem custo</span>` : '<span class="tag ok">todos os produtos têm custo</span>'}</p>

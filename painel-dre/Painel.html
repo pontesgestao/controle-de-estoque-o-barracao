@@ -95,7 +95,7 @@
   .alerta.erro { background: var(--erro-claro); color: var(--erro); }
   .alerta strong { display: block; }
 
-  .graficos { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .graficos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
   .grafico { position: relative; height: 280px; }
   .grafico.alto { height: 340px; }
 
@@ -128,7 +128,7 @@
   .toast.erro { background: var(--erro); }
 
   @media (max-width: 760px) {
-    .graficos { grid-template-columns: 1fr; }
+    .graficos { grid-template-columns: minmax(0, 1fr); }
     .topo .sub { display: none; }
     .kpi .valor { font-size: 1.4rem; }
   }

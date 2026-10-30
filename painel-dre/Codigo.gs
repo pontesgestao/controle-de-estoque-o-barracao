@@ -1,8 +1,8 @@
 /**
- * Painel DRE / CMV Fast Shake.
+ * Painel DRE / CMV O Barracão.
  *
  * Projeto Apps Script SEPARADO do app de contagem. Ele lê as contagens da
- * planilha "Estoque Fast Shake", guarda compras, custos e faturamento em abas
+ * planilha "Estoque O Barracão", guarda compras, custos e faturamento em abas
  * próprias e mostra o painel. Publique como App da Web com
  * "Executar como: Eu" e "Quem pode acessar: Somente eu" (veja o README).
  */
@@ -23,7 +23,7 @@ const CAB_IGNORADAS = ['ID contagem', 'Loja', 'Data', 'Ignorada em'];
 const CAB_PRODUTOS = ['Categoria', 'Produto', 'Criado em'];
 
 const MODELO_IA = 'claude-opus-5-5';
-const PASTA_FOTOS = 'Fast Shake - Notas fiscais';
+const PASTA_FOTOS = 'O Barracão - Notas fiscais';
 
 // Versão desta parte do código (a que fica colada no Google). A tela avisa
 // quando precisa de uma versão mais nova.
@@ -31,7 +31,7 @@ const VERSAO_SERVIDOR = 3;
 
 // A tela do painel vem do GitHub a cada abertura, assim as melhorias chegam
 // sem precisar colar nada. Sem conexão com o GitHub, usa a cópia local "Painel".
-const URL_TELA = 'https://raw.githubusercontent.com/pontesgestao/controle-de-estoque-fast-shake/painel-dre/painel-dre/Painel.html';
+const URL_TELA = 'https://raw.githubusercontent.com/pontesgestao/controle-de-estoque-o-barracao/painel-dre/painel-dre/Painel.html';
 
 function doGet() {
   let saida;
@@ -42,7 +42,7 @@ function doGet() {
   } catch (e) {
     saida = HtmlService.createHtmlOutputFromFile('Painel');
   }
-  return saida.setTitle('Painel DRE · Fast Shake').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  return saida.setTitle('Painel DRE · O Barracão').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 // ---------- Configuração ----------
@@ -277,7 +277,7 @@ function lerNota(fotos, catalogo) {
 
   const listaProdutos = catalogo.map(function (p, i) { return i + ' | ' + p; }).join('\n');
   const instrucoes =
-    'Você lê fotos e PDFs de notas fiscais (DANFE) e cupons fiscais brasileiros de compras de uma sorveteria (Fast Shake) ' +
+    'Você lê fotos e PDFs de notas fiscais (DANFE) e cupons fiscais brasileiros de compras de um restaurante e hamburgueria com marmitas mineiras (O Barracão) ' +
     'e extrai os itens comprados para dar entrada no estoque.\n\n' +
     'Para cada item da nota, informe:\n' +
     '- descricao: o texto do item como está na nota.\n' +
@@ -389,7 +389,7 @@ function aba_(ss, nome, cabecalho) {
   if (!aba) {
     aba = ss.insertSheet(nome);
     aba.getRange(1, 1, 1, cabecalho.length).setValues([cabecalho])
-      .setFontWeight('bold').setBackground('#273393').setFontColor('#FFFFFF').setWrap(true);
+      .setFontWeight('bold').setBackground('#1C1C1C').setFontColor('#FFFFFF').setWrap(true);
     aba.setFrozenRows(1);
   }
   return aba;

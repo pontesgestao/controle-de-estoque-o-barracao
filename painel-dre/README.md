@@ -1,4 +1,4 @@
-# Painel DRE / CMV — Fast Shake
+# Painel DRE / CMV — O Barracão
 
 Painel separado do app de contagem. **Só você acessa**, entrando com a sua conta Google. O app de contagem usado pelos gerentes continua igual.
 
@@ -34,7 +34,7 @@ Painel separado do app de contagem. **Só você acessa**, entrando com a sua con
 
 ### 1. Criar o projeto
 1. Acesse [script.google.com](https://script.google.com) com a **mesma conta Google da planilha** e clique em **Novo projeto**.
-2. Renomeie o projeto para **Painel DRE Fast Shake**.
+2. Renomeie o projeto para **Painel DRE O Barracão**.
 3. Apague o conteúdo de `Código.gs` e cole todo o arquivo [`Codigo.gs`](Codigo.gs).
 4. Clique em **+** (Arquivos) → **HTML**, dê o nome **Painel** e cole todo o arquivo [`Painel.html`](Painel.html).
 5. Clique em **Salvar**.
@@ -47,7 +47,7 @@ Painel separado do app de contagem. **Só você acessa**, entrando com a sua con
 
 ### 3. Configurar no próprio painel
 Abra o link e, na aba **Configurações**:
-1. Cole o **link da planilha "Estoque Fast Shake"** (a mesma que recebe as contagens).
+1. Cole o **link da planilha "Estoque O Barracão"** (a mesma que recebe as contagens).
 2. Cole a **chave da API da Anthropic**, para a leitura das notas:
    - crie uma conta em [console.anthropic.com](https://console.anthropic.com), adicione créditos em **Billing** e gere a chave em **API Keys**;
    - custo estimado: alguns centavos de dólar por nota lida (cerca de R$ 0,50).
@@ -71,7 +71,7 @@ Só o **`Codigo.gs`** precisa ser colado de novo, e raramente. Quando for necess
 
 ## Planilha
 
-O painel cria estas abas na planilha "Estoque Fast Shake" (as abas do app de contagem não são alteradas):
+O painel cria estas abas na planilha "Estoque O Barracão" (as abas do app de contagem não são alteradas):
 
 | Aba | Conteúdo |
 | --- | --- |

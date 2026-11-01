@@ -250,3 +250,12 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* Incluir produto que falta */
+#abrir-incluir { margin-top: 16px; border: 2px dashed var(--borda); }
+.form-incluir { margin-top: 16px; }
+.form-incluir h3 { font-size: 1.05rem; margin-bottom: 14px; }
+.botoes-incluir { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+.link-remover { margin-left: auto; border: 0; background: none; color: var(--erro); font-size: .85rem; font-weight: 700; text-decoration: underline; min-height: 32px; padding: 0 4px; flex-shrink: 0; }
+.item.destaque { animation: destaque 1.6s ease-out; }
+@keyframes destaque { from { box-shadow: 0 0 0 4px var(--laranja); } to { box-shadow: var(--sombra); } }

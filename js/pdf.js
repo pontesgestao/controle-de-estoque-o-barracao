@@ -52,7 +52,7 @@
     return String(t == null ? '' : t).replace(/[–—]/g, '-').replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
   }
   function numero(n) {
-    return Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 2, useGrouping: false });
+    return Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3, useGrouping: false });
   }
   function dataHora(iso) {
     return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });

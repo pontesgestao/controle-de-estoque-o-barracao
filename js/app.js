@@ -7,27 +7,39 @@
   const CHAVE_PERFIL = 'obarracao-perfil-v1';
   const CHAVE_ULTIMA = 'obarracao-ultima-v1';
   const CHAVE_PRODUTOS_NOVOS = 'obarracao-produtos-novos-v1';
+  const CHAVE_PRODUTOS_INCLUIDOS = 'obarracao-produtos-incluidos-v1';
   const app = document.getElementById('app');
 
   // Produtos criados no Painel DRE (aba "Produtos novos" da planilha) entram
   // no fim da categoria deles, ou numa categoria nova no fim da lista.
   // Cada item ganha um id pelo nome (categoria + produto), assim incluir ou
   // reordenar produtos não embaralha uma contagem que já estava em andamento.
-  function montarCategorias(extras) {
+  // Produtos incluídos pelo gerente na própria contagem também entram aqui,
+  // marcados como "incluido" para poderem ser removidos.
+  function montarCategorias(extras, incluidos) {
     const lista = window.CATEGORIAS.map((cat) => ({ nome: cat.nome, itens: cat.itens.slice() }));
-    (extras || []).forEach((p) => {
+    const juntar = (p, incluido) => {
       let cat = lista.find((c) => c.nome.toLowerCase() === p.categoria.toLowerCase());
       if (!cat) { cat = { nome: p.categoria, itens: [] }; lista.push(cat); }
-      if (!cat.itens.some((it) => it.nome.toLowerCase() === p.produto.toLowerCase())) cat.itens.push({ nome: p.produto, medida: /\(kg\)\s*$/i.test(p.produto) ? 'kg' : 'un' });
-    });
+      if (!cat.itens.some((it) => it.nome.toLowerCase() === p.produto.toLowerCase())) {
+        cat.itens.push({ nome: p.produto, medida: /\(kg\)\s*$/i.test(p.produto) ? 'kg' : 'un', incluido });
+      }
+    };
+    (extras || []).forEach((p) => juntar(p, false));
+    (incluidos || []).forEach((p) => juntar(p, true));
     return lista.map((cat) => ({
       nome: cat.nome,
       itens: cat.itens.map((item) => ({ ...item, id: cat.nome + '|' + item.nome })),
     }));
   }
   let produtosNovos = carregar(CHAVE_PRODUTOS_NOVOS) || [];
-  let categorias = montarCategorias(produtosNovos);
-  let totalItens = categorias.reduce((s, c) => s + c.itens.length, 0);
+  let produtosIncluidos = carregar(CHAVE_PRODUTOS_INCLUIDOS) || [];
+  let categorias, totalItens;
+  function remontar() {
+    categorias = montarCategorias(produtosNovos, produtosIncluidos);
+    totalItens = categorias.reduce((s, c) => s + c.itens.length, 0);
+  }
+  remontar();
 
   // Busca a lista atualizada de produtos novos. Ela vale a partir da próxima
   // contagem iniciada, para não mudar uma contagem em andamento.
@@ -74,7 +86,7 @@
     return Number.isFinite(n) && n >= 0 ? n : null;
   }
   function formatar(n) {
-    return Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 2, useGrouping: false });
+    return Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3, useGrouping: false });
   }
 
   // Cada item guarda: modo ('un' | 'cx' | 'zero'), q (unidades),
@@ -222,8 +234,7 @@
       botao.innerHTML = '<span class="carregando"></span> Preparando a contagem…';
       await Promise.race([buscarProdutosNovos(), new Promise((ok) => setTimeout(ok, 5000))]);
       // Já deixa marcados os produtos que esta loja informou não trabalhar.
-      categorias = montarCategorias(produtosNovos);
-      totalItens = categorias.reduce((s, c) => s + c.itens.length, 0);
+      remontar();
       const valores = {};
       Object.keys((carregar(CHAVE_NAO_TRABALHA) || {})[unidade] || {}).forEach((id) => { valores[id] = { modo: 'nt' }; });
       estado = { id: gerarId(), unidade, responsavel, iniciadoEm: new Date().toISOString(), valores, puladas: {}, passo: 0, observacoes: '' };
@@ -301,7 +312,8 @@
       `<button type="button" role="radio" data-modo="${m}" aria-checked="${v.modo === m}">${texto}</button>`;
     return `
       <li class="item modo-${modo} ${itemCompleto(it.id) ? 'preenchido' : ''}" data-id="${esc(it.id)}">
-        <div class="item-nome"><span class="ok" aria-hidden="true">✓</span>${esc(it.nome)}</div>
+        <div class="item-nome"><span class="ok" aria-hidden="true">✓</span>${esc(it.nome)}${it.incluido ? `
+          <button type="button" class="link-remover" data-remover="sim">Remover</button>` : ''}</div>
         <div class="pergunta-linha">
           <p class="pergunta">Como você contou?</p>
           <button type="button" class="link-nt" data-nt="sim">Não trabalho com este produto</button>
@@ -366,7 +378,27 @@
             <span><strong>Não contei esta categoria hoje</strong><small>Toque aqui para pular para a próxima</small></span>
           </button>
           <p class="dica">Para cada item, escolha <strong>como contou</strong>. Se contou em caixa, fardo ou pacote, informe quantas unidades vêm em cada um.</p>
-          <ul class="itens">${cat.itens.map(htmlItem).join('')}</ul>`}
+          <ul class="itens">${cat.itens.map(htmlItem).join('')}</ul>
+          <button type="button" class="btn btn-secundario btn-bloco" id="abrir-incluir">+ Incluir produto que falta</button>
+          <form class="cartao form-incluir" id="form-incluir" hidden novalidate>
+            <h3>Incluir produto em ${esc(cat.nome)}</h3>
+            <div class="campo">
+              <label for="novo-nome">Nome do produto</label>
+              <input id="novo-nome" type="text" autocomplete="off" enterkeyhint="done" placeholder="Ex.: Polpa de goiaba">
+            </div>
+            <div class="campo">
+              <label for="novo-medida">Como ele é contado?</label>
+              <select id="novo-medida">
+                <option value="un">Por unidade (un, caixa, fardo, pacote)</option>
+                <option value="kg">Por peso (kg)</option>
+              </select>
+            </div>
+            <p class="aviso aviso-erro" id="erro-incluir" hidden></p>
+            <div class="botoes-incluir">
+              <button type="button" class="btn btn-secundario" id="cancelar-incluir">Cancelar</button>
+              <button type="submit" class="btn btn-primario">Incluir</button>
+            </div>
+          </form>`}
       </section>
       <footer class="rodape">
         <div class="rodape-interno">
@@ -429,6 +461,42 @@
     const lista = app.querySelector('.itens');
     const memoria = carregar(CHAVE_EMBALAGENS) || {};
 
+    // Incluir um produto que não está na lista. Ele fica guardado neste
+    // aparelho para as próximas contagens e vai junto no envio, para a
+    // planilha registrar na aba "Produtos novos".
+    const formIncluir = document.getElementById('form-incluir');
+    const abrirIncluir = document.getElementById('abrir-incluir');
+    abrirIncluir.onclick = () => {
+      abrirIncluir.hidden = true;
+      formIncluir.hidden = false;
+      formIncluir.scrollIntoView({ block: 'center' });
+      document.getElementById('novo-nome').focus({ preventScroll: true });
+    };
+    document.getElementById('cancelar-incluir').onclick = () => {
+      formIncluir.hidden = true;
+      abrirIncluir.hidden = false;
+    };
+    formIncluir.onsubmit = (e) => {
+      e.preventDefault();
+      const erro = document.getElementById('erro-incluir');
+      let nome = document.getElementById('novo-nome').value.replace(/\s+/g, ' ').trim().replace(/\s*\(kg\)$/i, '');
+      if (document.getElementById('novo-medida').value === 'kg') nome += ' (kg)';
+      if (!nome || nome === ' (kg)') {
+        erro.textContent = 'Digite o nome do produto.';
+        erro.hidden = false;
+        return;
+      }
+      const existente = cat.itens.find((it) => it.nome.toLowerCase() === nome.toLowerCase());
+      if (!existente) {
+        produtosIncluidos.push({ categoria: cat.nome, produto: nome });
+        guardar(CHAVE_PRODUTOS_INCLUIDOS, produtosIncluidos);
+        remontar();
+      }
+      telaContagem(ci);
+      const li = app.querySelector(`.item[data-id="${CSS.escape(cat.nome + '|' + (existente ? existente.nome : nome))}"]`);
+      if (li) { li.scrollIntoView({ block: 'center' }); li.classList.add('destaque'); }
+    };
+
     function atualizarItem(li) {
       const id = li.dataset.id;
       const it = cat.itens.find((x) => x.id === id);
@@ -469,6 +537,19 @@
     lista.addEventListener('click', (e) => {
       const li = e.target.closest('.item');
       if (!li) return;
+
+      if (e.target.closest('[data-remover]')) {
+        const id = li.dataset.id;
+        const it = cat.itens.find((x) => x.id === id);
+        if (!confirm(`Remover "${it.nome}" da lista?`)) return;
+        produtosIncluidos = produtosIncluidos.filter((p) => !(p.categoria === cat.nome && p.produto === it.nome));
+        guardar(CHAVE_PRODUTOS_INCLUIDOS, produtosIncluidos);
+        delete estado.valores[id];
+        salvar();
+        remontar();
+        telaContagem(ci);
+        return;
+      }
 
       const nt = e.target.closest('[data-nt]');
       if (nt) {
@@ -560,6 +641,7 @@
       enviadoEm: new Date().toISOString(),
       observacoes: estado.observacoes || '',
       categoriasNaoContadas: categorias.filter((c, ci) => pulada(ci)).map((c) => c.nome),
+      produtosIncluidos: produtosIncluidos.slice(),
       itens,
     };
   }

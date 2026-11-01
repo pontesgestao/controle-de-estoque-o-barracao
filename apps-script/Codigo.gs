@@ -11,6 +11,7 @@ const ABA_CONTAGENS = 'Contagens';
 const ABA_PRODUTOS_NOVOS = 'Produtos novos';
 const CABECALHO_RESUMO = ['Data/hora', 'Unidade', 'Responsável', 'Itens contados', 'Itens zerados', 'Observações',
   'Início da contagem', 'ID', 'Categorias não contadas'];
+const CABECALHO_PRODUTOS_NOVOS = ['Categoria', 'Produto', 'Criado em'];
 const CABECALHO_CONTAGENS = ['Data/hora', 'Unidade', 'Responsável', 'Categoria', 'Produto', 'Situação',
   'Forma de contagem', 'Embalagens fechadas', 'Unidades por embalagem', 'Unidades soltas', 'Total (unidades)', 'ID'];
 
@@ -41,6 +42,21 @@ function doPost(e) {
         numero(i.totalUnidades), texto(d.id)];
     });
     contagens.getRange(contagens.getLastRow() + 1, 1, linhas.length, linhas[0].length).setValues(linhas);
+
+    // Produtos que o gerente incluiu na contagem passam a valer para todos os
+    // aparelhos e para o Painel DRE.
+    if (Array.isArray(d.produtosIncluidos) && d.produtosIncluidos.length) {
+      const abaNovos = obterAba(ss, ABA_PRODUTOS_NOVOS, CABECALHO_PRODUTOS_NOVOS);
+      const ja = abaNovos.getLastRow() < 2 ? [] : abaNovos.getRange(2, 1, abaNovos.getLastRow() - 1, 2).getValues()
+        .map(function (r) { return (String(r[0]) + '|' + String(r[1])).toLowerCase(); });
+      d.produtosIncluidos.forEach(function (p) {
+        if (!p || !p.categoria || !p.produto) return;
+        const k = (String(p.categoria) + '|' + String(p.produto)).toLowerCase();
+        if (ja.indexOf(k) >= 0) return;
+        ja.push(k);
+        abaNovos.appendRow([texto(p.categoria), texto(p.produto), quando]);
+      });
+    }
 
     const contados = d.itens.filter(function (i) { return i.situacao === 'Contada'; });
     const zerados = contados.filter(function (i) { return i.totalUnidades === 0; });

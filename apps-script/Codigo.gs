@@ -12,6 +12,11 @@ const ABA_PRODUTOS_NOVOS = 'Produtos novos';
 const CABECALHO_RESUMO = ['Data/hora', 'Unidade', 'Responsável', 'Itens contados', 'Itens zerados', 'Observações',
   'Início da contagem', 'ID', 'Categorias não contadas'];
 const CABECALHO_PRODUTOS_NOVOS = ['Categoria', 'Produto', 'Criado em'];
+// Mesmas colunas que o Painel DRE usa na aba "Custos".
+const ABA_CUSTOS = 'Custos';
+const CABECALHO_CUSTOS = ['Categoria', 'Produto', 'Custo por unidade (R$)', 'Vigente desde', 'Origem', 'ID compra', 'Registrado em'];
+const ORIGEM_APROVACAO = 'Aprovação inicial';
+const VIGENCIA_CUSTOS_INICIAIS = '2026-10-31';
 const CABECALHO_CONTAGENS = ['Data/hora', 'Unidade', 'Responsável', 'Categoria', 'Produto', 'Situação',
   'Forma de contagem', 'Embalagens fechadas', 'Unidades por embalagem', 'Unidades soltas', 'Total (unidades)', 'ID'];
 
@@ -20,6 +25,7 @@ function doPost(e) {
   lock.waitLock(20000);
   try {
     const d = JSON.parse(e.postData.contents);
+    if (d && d.acao === 'custos') return responder(gravarCustosAprovados(d));
     if (!d || !d.id || !d.unidade || !Array.isArray(d.itens) || d.itens.length === 0) {
       return responder({ ok: false, erro: 'Dados incompletos' });
     }
@@ -94,7 +100,51 @@ function doGet(e) {
       .map(function (r) { return { categoria: String(r[0]).trim(), produto: String(r[1]).trim() }; });
     return responder({ ok: true, produtos: produtos });
   }
+  if (e && e.parameter && e.parameter.acao === 'custos') {
+    return responder({ ok: true, custos: custosAprovados() });
+  }
   return responder({ ok: true, app: 'Contagem O Barracão' });
+}
+
+// ---------- Aprovação dos custos iniciais (página aprovar-custos.html) ----------
+
+// Cada aprovação entra como uma linha nova na aba "Custos", que o Painel DRE
+// lê. Aprovar de novo o mesmo produto acrescenta outra linha; vale a última.
+function gravarCustosAprovados(d) {
+  if (!Array.isArray(d.itens) || d.itens.length === 0 || d.itens.length > 400) return { ok: false, erro: 'Dados incompletos' };
+  const quem = texto(d.responsavel).slice(0, 60);
+  if (!quem) return { ok: false, erro: 'Informe quem está aprovando' };
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const aba = obterAba(ss, ABA_CUSTOS, CABECALHO_CUSTOS);
+  const vigente = new Date(VIGENCIA_CUSTOS_INICIAIS + 'T12:00:00');
+  const agora = new Date();
+  const linhas = [];
+  d.itens.forEach(function (i) {
+    const custo = Number(i && i.custo);
+    if (!i || !i.categoria || !i.produto || !isFinite(custo) || custo < 0 || custo > 100000) return;
+    linhas.push([texto(i.categoria), texto(i.produto), custo, vigente, ORIGEM_APROVACAO + ' · ' + quem, '', agora]);
+  });
+  if (!linhas.length) return { ok: false, erro: 'Nenhum custo válido' };
+  aba.getRange(aba.getLastRow() + 1, 1, linhas.length, CABECALHO_CUSTOS.length).setValues(linhas);
+  aba.getRange(2, 4, aba.getLastRow() - 1, 1).setNumberFormat('dd/MM/yyyy');
+  return { ok: true, gravados: linhas.length };
+}
+
+// Último custo aprovado de cada produto, para a página mostrar o que já foi feito.
+function custosAprovados() {
+  const aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_CUSTOS);
+  if (!aba || aba.getLastRow() < 2) return [];
+  const ultimos = {};
+  aba.getRange(2, 1, aba.getLastRow() - 1, CABECALHO_CUSTOS.length).getValues().forEach(function (r) {
+    const origem = String(r[4]);
+    if (origem.indexOf(ORIGEM_APROVACAO) !== 0) return;
+    ultimos[String(r[0]) + '|' + String(r[1])] = {
+      categoria: String(r[0]), produto: String(r[1]), custo: Number(r[2]),
+      por: origem.slice(ORIGEM_APROVACAO.length + 3),
+      em: r[6] instanceof Date ? r[6].toISOString() : '',
+    };
+  });
+  return Object.keys(ultimos).map(function (k) { return ultimos[k]; });
 }
 
 // Rode uma vez pelo editor para criar as abas formatadas.

@@ -755,13 +755,29 @@
       if (problemas.length) { toast('Antes de salvar: ' + problemas.slice(0, 3).join('; '), true); return; }
       salvar.disabled = true;
       salvar.innerHTML = '<span class="carregando"></span> Salvando…';
-      try {
-        await chamar('salvarCompra', { loja: n.loja, dia: n.dia, fornecedor: n.fornecedor, documento: n.documento, fotos: n.fotos, itens });
+      const dadosCompra = { loja: n.loja, dia: n.dia, fornecedor: n.fornecedor, documento: n.documento, fotos: n.fotos, itens };
+      const concluir = async (r) => {
         notaRascunho = null;
         await recarregar();
-        toast('Compra salva e custos atualizados');
+        toast(r && r.avisoFotos ? 'Compra salva, mas sem a foto: ' + r.avisoFotos : 'Compra salva e custos atualizados', !!(r && r.avisoFotos));
+      };
+      try {
+        await concluir(await chamar('salvarCompra', dadosCompra));
       } catch (err) {
-        toast('Não foi possível salvar: ' + err.message, true);
+        // O Google Drive pode recusar a foto (armazenamento cheio ou limite
+        // do dia). A compra não depende da foto: oferece salvar sem ela.
+        const msg = String(err && err.message || err);
+        if (n.fotos.length && /drive|limite|limit|armazenamento|storage/i.test(msg) &&
+            confirm('O Google Drive recusou guardar a foto da nota (' + msg + ').\n\nSalvar a compra sem a foto? Os itens e os custos são gravados normalmente.')) {
+          try {
+            await concluir(await chamar('salvarCompra', { ...dadosCompra, fotos: [] }));
+            return;
+          } catch (err2) {
+            toast('Não foi possível salvar: ' + (err2 && err2.message || err2), true);
+          }
+        } else {
+          toast('Não foi possível salvar: ' + msg, true);
+        }
         salvar.disabled = false;
         salvar.textContent = 'Salvar compra';
       }

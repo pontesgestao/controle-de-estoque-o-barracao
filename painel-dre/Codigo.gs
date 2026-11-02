@@ -218,15 +218,23 @@ function salvarCompra(compra) {
     const dia = new Date(compra.dia + 'T12:00:00');
     const agora = new Date();
 
+    // A foto é só um comprovante: se o Google Drive recusar (armazenamento
+    // cheio, limite do dia), a compra é salva mesmo assim, com um aviso.
     let fotos = '';
+    let avisoFotos = '';
     if (compra.fotos && compra.fotos.length) {
-      const pasta = pastaFotos_();
-      fotos = compra.fotos.map(function (arq, i) {
-        const pdf = arq.tipo === 'application/pdf';
-        const blob = Utilities.newBlob(Utilities.base64Decode(arq.dados), pdf ? 'application/pdf' : 'image/jpeg',
-          compra.dia + ' ' + compra.loja + ' ' + (compra.fornecedor || 'nota') + ' ' + (i + 1) + (pdf ? '.pdf' : '.jpg'));
-        return pasta.createFile(blob).getUrl();
-      }).join(' ');
+      try {
+        const pasta = pastaFotos_();
+        fotos = compra.fotos.map(function (arq, i) {
+          const pdf = arq.tipo === 'application/pdf';
+          const blob = Utilities.newBlob(Utilities.base64Decode(arq.dados), pdf ? 'application/pdf' : 'image/jpeg',
+            compra.dia + ' ' + compra.loja + ' ' + (compra.fornecedor || 'nota') + ' ' + (i + 1) + (pdf ? '.pdf' : '.jpg'));
+          return pasta.createFile(blob).getUrl();
+        }).join(' ');
+      } catch (e) {
+        fotos = '';
+        avisoFotos = 'o Google Drive recusou a foto (' + String(e && e.message || e) + ').';
+      }
     }
 
     const linhas = compra.itens.map(function (it) {
@@ -246,7 +254,7 @@ function salvarCompra(compra) {
       const abaCustos = aba_(ss, ABA_CUSTOS, CAB_CUSTOS);
       abaCustos.getRange(abaCustos.getLastRow() + 1, 1, custos.length, CAB_CUSTOS.length).setValues(custos);
     }
-    return id;
+    return { id: id, avisoFotos: avisoFotos };
   } finally {
     lock.releaseLock();
   }

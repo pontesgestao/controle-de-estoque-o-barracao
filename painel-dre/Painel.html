@@ -1371,7 +1371,26 @@
     render();
   }
 
-  recarregar().catch((err) => {
+  // Se a planilha não responder, explica as causas mais comuns em vez de
+  // deixar o "Carregando…" girando sem fim. Se os dados chegarem depois,
+  // o painel abre normalmente.
+  const demora = setTimeout(() => {
+    if (dados) return;
+    conteudo.innerHTML = `<div class="cartao" style="max-width:640px">
+      <h2>O painel não está conseguindo carregar</h2>
+      <p class="dica">Já se passaram 25 segundos sem resposta da planilha. Normalmente é uma destas causas:</p>
+      <ol class="telegram-passos">
+        <li><strong>Mais de uma conta Google aberta neste navegador.</strong> O Google se confunde e não responde. Abra o link do painel numa <strong>aba anônima</strong> e entre só com a conta que tem acesso à planilha. Se o endereço tiver <strong>/u/1/</strong>, troque por <strong>/u/0/</strong>.</li>
+        <li><strong>Falta autorizar o painel.</strong> Depois de uma atualização, o Google pede permissão de novo. Feche e abra o link; se aparecer a tela de autorização, toque em Avançado → Acessar → Permitir.</li>
+        <li><strong>Internet lenta.</strong> Espere mais um pouco ou recarregue a página.</li>
+      </ol>
+      <button class="btn btn-azul" id="recarregar-pagina">Recarregar</button>
+    </div>`;
+    document.getElementById('recarregar-pagina').onclick = () => location.reload();
+  }, 25000);
+
+  recarregar().then(() => clearTimeout(demora), (err) => {
+    clearTimeout(demora);
     const msg = String(err && err.message || err);
     if (msg.includes('SEM_ACESSO')) toast(msg.replace(/^.*SEM_ACESSO:\s*/, ''), true);
     else if (!msg.includes('CONFIGURAR')) toast('Erro ao carregar: ' + msg, true);

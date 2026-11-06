@@ -457,6 +457,9 @@ function conectarTelegram(token) {
     p.deleteProperty('TELEGRAM_CHATS');
     p.setProperty('TELEGRAM_ROBO', telegram_('getMe').username || '');
   }
+  // Um webhook ligado no robô impede a leitura das mensagens; desligar não
+  // apaga nada (as mensagens pendentes continuam guardadas).
+  try { telegram_('deleteWebhook', { drop_pending_updates: false }); } catch (e) { /* segue */ }
   const atualizacoes = telegram_('getUpdates', { allowed_updates: ['message'] }) || [];
   const chats = JSON.parse(p.getProperty('TELEGRAM_CHATS') || '[]');
   atualizacoes.forEach(function (u) {
@@ -474,6 +477,30 @@ function conectarTelegram(token) {
   chats.forEach(function (c) {
     telegram_('sendMessage', { chat_id: c.id, text: '✅ Avisos de contas a pagar do O Barracão conectados.' });
   });
+  return estadoTelegram_();
+}
+
+/**
+ * Conecta uma pessoa pelo número de usuário do Telegram (o @userinfobot
+ * mostra), sem depender das mensagens guardadas no robô. A pessoa precisa
+ * ter apertado Iniciar no robô antes.
+ */
+function adicionarChatTelegram(id) {
+  exigirConfigurador_();
+  const chatId = Number(String(id || '').replace(/[^\d-]/g, ''));
+  if (!chatId) throw new Error('Digite o número (Id) que o @userinfobot mostrou.');
+  let nome = 'Contato';
+  try {
+    const chat = telegram_('getChat', { chat_id: chatId });
+    nome = [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || nome;
+  } catch (e) {
+    throw new Error('O robô não consegue falar com esse número. Abra o robô no Telegram, aperte Iniciar e confira o Id no @userinfobot.');
+  }
+  telegram_('sendMessage', { chat_id: chatId, text: '✅ Avisos de contas a pagar do O Barracão conectados.' });
+  const p = props_();
+  const chats = JSON.parse(p.getProperty('TELEGRAM_CHATS') || '[]');
+  if (!chats.some(function (c) { return c.id === chatId; })) chats.push({ id: chatId, nome: nome });
+  p.setProperty('TELEGRAM_CHATS', JSON.stringify(chats));
   return estadoTelegram_();
 }
 

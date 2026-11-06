@@ -1331,6 +1331,18 @@ setTimeout(function () {
           <button class="btn btn-azul" id="tg-conectar">${tg.chats.length ? 'Conectar mais pessoas' : 'Conectar'}</button>
           ${tg.chats.length ? '<button class="btn btn-secundario" id="tg-testar">Enviar teste</button><button class="btn btn-perigo" id="tg-desconectar">Desconectar</button>' : ''}
         </div>
+        ${tg.temToken ? `<details style="margin-bottom:14px" ${tg.chats.length ? '' : 'open'}>
+          <summary class="dica" style="cursor:pointer;margin:0 0 8px"><b>Conectar pelo número do Telegram</b> (se o botão Conectar não encontrar ninguém)</summary>
+          <ol class="telegram-passos">
+            <li>No Telegram, abra o <b>@userinfobot</b> e toque em <b>Iniciar</b>. Ele responde com o seu <b>Id</b> (um número).</li>
+            <li>Confira que você já apertou <b>Iniciar</b> no robô${tg.robo ? ' @' + esc(tg.robo) : ''}.</li>
+            <li>Cole o número abaixo e toque em <b>Adicionar</b>. O robô manda uma mensagem de confirmação.</li>
+          </ol>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+            <label class="campo" style="flex:1;min-width:160px">Id do Telegram<input type="text" inputmode="numeric" id="tg-id" placeholder="Ex.: 123456789"></label>
+            <button class="btn btn-azul" id="tg-adicionar">Adicionar</button>
+          </div>
+        </details>` : ''}
         ${tg.chats.length ? `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
           <label class="campo" style="width:160px">Horário do aviso
             <select id="tg-hora">${[5, 6, 7, 8, 9, 10, 11, 12].map((h) => `<option value="${h}" ${(tg.hora == null ? 8 : tg.hora) === h ? 'selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('')}</select></label>
@@ -1352,6 +1364,7 @@ setTimeout(function () {
       };
     };
     tgAcao('tg-conectar', () => chamar('conectarTelegram', document.getElementById('tg-token').value.trim()), 'Telegram conectado. Confira a mensagem no celular.');
+    tgAcao('tg-adicionar', () => chamar('adicionarChatTelegram', document.getElementById('tg-id').value.trim()), 'Conectado. Confira a mensagem no Telegram.');
     tgAcao('tg-testar', () => chamar('testarTelegram'), 'Teste enviado. Confira o Telegram.');
     tgAcao('tg-desconectar', () => chamar('desconectarTelegram'), 'Telegram desconectado');
     tgAcao('tg-ativar', () => chamar('ativarAvisoDiario', Number(document.getElementById('tg-hora').value)), 'Aviso diário ligado');

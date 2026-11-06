@@ -213,6 +213,12 @@
 <main id="conteudo"><div class="vazio"><span class="carregando escuro"></span> Carregando…</div></main>
 
 <script>
+// Mostra na tela qualquer erro da página, para não ficar só "Carregando…".
+window.addEventListener('error', (e) => {
+  const m = document.getElementById('conteudo');
+  if (m) m.insertAdjacentHTML('afterbegin', '<div class="alerta erro" style="margin-bottom:16px"><strong>Erro na tela do painel</strong>' +
+    String(e.message || e.error || 'erro').replace(/[<>&]/g, '') + ' (linha ' + (e.lineno || '?') + '). Mande um print disto.</div>');
+});
 (function () {
   'use strict';
 
@@ -1374,7 +1380,14 @@
   // Se a planilha não responder, explica as causas mais comuns em vez de
   // deixar o "Carregando…" girando sem fim. Se os dados chegarem depois,
   // o painel abre normalmente.
+  const inicio = Date.now();
+  const contador = setInterval(() => {
+    const el = document.querySelector('main > .vazio');
+    if (dados || !el) { clearInterval(contador); return; }
+    el.innerHTML = `<span class="carregando escuro"></span> Carregando… ${Math.round((Date.now() - inicio) / 1000)} s`;
+  }, 1000);
   const demora = setTimeout(() => {
+    clearInterval(contador);
     if (dados) return;
     conteudo.innerHTML = `<div class="cartao" style="max-width:640px">
       <h2>O painel não está conseguindo carregar</h2>

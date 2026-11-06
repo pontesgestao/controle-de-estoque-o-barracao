@@ -424,8 +424,8 @@ function estadoTelegram_() {
   const chats = JSON.parse(p.getProperty('TELEGRAM_CHATS') || '[]');
   const hora = p.getProperty('AVISO_HORA');
   const ativo = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'avisarVencimentos'; });
-  return { temToken: !!p.getProperty('TELEGRAM_TOKEN'), chats: chats.map(function (c) { return c.nome; }),
-    ativo: ativo, hora: hora ? Number(hora) : null };
+  return { temToken: !!p.getProperty('TELEGRAM_TOKEN'), robo: p.getProperty('TELEGRAM_ROBO') || '',
+    chats: chats.map(function (c) { return c.nome; }), ativo: ativo, hora: hora ? Number(hora) : null };
 }
 
 function telegram_(metodo, dados) {
@@ -449,7 +449,14 @@ function telegram_(metodo, dados) {
 function conectarTelegram(token) {
   exigirConfigurador_();
   const p = props_();
-  if (token) p.setProperty('TELEGRAM_TOKEN', String(token).trim());
+  if (token) {
+    // Guarda o token e o nome do robô dono dele, para o painel mostrar o
+    // link do robô certo (getMe falha se o token estiver errado).
+    const limpo = String(token).replace(/\s+/g, '');
+    p.setProperty('TELEGRAM_TOKEN', limpo);
+    p.deleteProperty('TELEGRAM_CHATS');
+    p.setProperty('TELEGRAM_ROBO', telegram_('getMe').username || '');
+  }
   const atualizacoes = telegram_('getUpdates', { allowed_updates: ['message'] }) || [];
   const chats = JSON.parse(p.getProperty('TELEGRAM_CHATS') || '[]');
   atualizacoes.forEach(function (u) {
@@ -460,11 +467,9 @@ function conectarTelegram(token) {
   });
   p.setProperty('TELEGRAM_CHATS', JSON.stringify(chats));
   if (!chats.length) {
-    let robo = '';
-    try { robo = '@' + telegram_('getMe').username; } catch (e) { /* segue sem o nome */ }
-    throw new Error('O Telegram não tem nenhuma mensagem para o robô ' + (robo || 'deste token') + '. ' +
-      'Abra ' + (robo || 'esse robô') + ' no Telegram, mande uma mensagem (ex.: oi) e toque em Conectar de novo. ' +
-      'Se não for o robô que você criou, pegue o token certo no @BotFather (/mybots → o robô → API Token).');
+    const robo = p.getProperty('TELEGRAM_ROBO') ? '@' + p.getProperty('TELEGRAM_ROBO') : 'deste token';
+    throw new Error('O token salvo é do robô ' + robo + ', e ninguém mandou mensagem para ele ainda. ' +
+      'Toque em "Abrir no Telegram", aperte Iniciar e depois toque em Conectar de novo.');
   }
   chats.forEach(function (c) {
     telegram_('sendMessage', { chat_id: c.id, text: '✅ Avisos de contas a pagar do O Barracão conectados.' });

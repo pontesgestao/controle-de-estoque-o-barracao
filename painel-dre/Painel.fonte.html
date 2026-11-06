@@ -1319,6 +1319,11 @@ setTimeout(function () {
           <li>Ele responde com um <strong>token</strong> (parece <code>123456:ABC-…</code>). Copie e cole abaixo.</li>
           <li>Toque no link do seu robô que o BotFather mandou e aperte <strong>Iniciar</strong>. Cada pessoa que vai receber o aviso faz isso no próprio Telegram.</li>
         </ol>`}
+        ${tg.robo ? `<div class="alerta" style="margin-bottom:12px;background:var(--azul-claro);color:var(--azul)">
+          <strong>Robô deste token: @${esc(tg.robo)}</strong>
+          ${tg.chats.length ? 'Para incluir mais alguém, a pessoa abre o robô, aperta Iniciar e você toca em "Conectar mais pessoas".' : 'Abra o robô, aperte <b>Iniciar</b> e volte aqui para tocar em <b>Conectar</b>.'}
+          <div style="margin-top:8px"><a class="btn btn-primario" style="text-decoration:none" href="https://t.me/${encodeURIComponent(tg.robo)}?start=barracao" target="_blank" rel="noopener">Abrir no Telegram</a></div>
+        </div>` : ''}
         <label class="campo" style="margin-bottom:10px">Token do robô
           <input type="password" id="tg-token" placeholder="${tg.temToken ? 'cadastrado · deixe em branco para manter' : '123456:ABC-…'}" autocomplete="off"></label>
         <p class="dica">${tg.chats.length ? `<span class="tag ok">recebem o aviso</span> ${tg.chats.map(esc).join(', ')}` : '<span class="tag alerta">ninguém conectado</span> mande /start para o robô e toque em Conectar'}</p>
@@ -1340,7 +1345,10 @@ setTimeout(function () {
       el.onclick = async () => {
         el.disabled = true;
         try { await fn(); toast(msg); await recarregar().catch(() => {}); aba = 'config'; render(); }
-        catch (err) { toast(err.message || String(err), true); el.disabled = false; }
+        catch (err) {
+          toast(err.message || String(err), true);
+          if (id === 'tg-conectar') { aba = 'config'; render(); } else el.disabled = false;
+        }
       };
     };
     tgAcao('tg-conectar', () => chamar('conectarTelegram', document.getElementById('tg-token').value.trim()), 'Telegram conectado. Confira a mensagem no celular.');

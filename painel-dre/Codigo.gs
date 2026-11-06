@@ -55,7 +55,28 @@ function props_() { return PropertiesService.getScriptProperties(); }
 function planilha_() {
   const id = props_().getProperty('PLANILHA_ID');
   if (!id) throw new Error('CONFIGURAR');
-  return SpreadsheetApp.openById(id);
+  try {
+    return SpreadsheetApp.openById(id);
+  } catch (e) {
+    throw new Error('SEM_ACESSO: a conta ' + (Session.getActiveUser().getEmail() || 'Google usada neste aparelho') +
+      ' não tem acesso à planilha "Estoque O Barracão". Peça ao responsável para compartilhar a planilha com ela como Editor.');
+  }
+}
+
+// Só quem é dono ou editor deste projeto do Google muda as configurações
+// (planilha, chave da API, Telegram), para quem só usa o painel não trocar
+// a planilha ou a chave de todo mundo.
+function podeConfigurar_() {
+  try {
+    const eu = Session.getActiveUser().getEmail();
+    const arquivo = DriveApp.getFileById(ScriptApp.getScriptId());
+    return !!eu && (arquivo.getOwner().getEmail() === eu || arquivo.getEditors().some(function (u) { return u.getEmail() === eu; }));
+  } catch (e) {
+    return false;
+  }
+}
+function exigirConfigurador_() {
+  if (!podeConfigurar_()) throw new Error('Só o responsável pelo painel pode mudar as configurações.');
 }
 
 function obterConfig() {
@@ -64,10 +85,12 @@ function obterConfig() {
   if (p.getProperty('PLANILHA_ID')) {
     try { nome = planilha_().getName(); } catch (e) { nome = ''; }
   }
-  return { planilha: nome, temPlanilha: !!nome, temChave: !!p.getProperty('ANTHROPIC_API_KEY'), telegram: estadoTelegram_() };
+  return { planilha: nome, temPlanilha: !!nome, temChave: !!p.getProperty('ANTHROPIC_API_KEY'), telegram: estadoTelegram_(),
+    podeConfigurar: podeConfigurar_(), conta: Session.getActiveUser().getEmail() };
 }
 
 function salvarConfig(cfg) {
+  exigirConfigurador_();
   const p = props_();
   if (cfg.planilha) {
     const m = String(cfg.planilha).match(/\/d\/([a-zA-Z0-9-_]+)/);
@@ -424,6 +447,7 @@ function telegram_(metodo, dados) {
  * Cada pessoa que vai receber o aviso manda /start para o robô antes.
  */
 function conectarTelegram(token) {
+  exigirConfigurador_();
   const p = props_();
   if (token) p.setProperty('TELEGRAM_TOKEN', String(token).trim());
   const atualizacoes = telegram_('getUpdates', { allowed_updates: ['message'] }) || [];
@@ -443,6 +467,7 @@ function conectarTelegram(token) {
 }
 
 function desconectarTelegram() {
+  exigirConfigurador_();
   const p = props_();
   p.deleteProperty('TELEGRAM_CHATS');
   ativarAvisoDiario(-1);
@@ -451,6 +476,7 @@ function desconectarTelegram() {
 
 /** Liga o aviso diário na hora pedida (fuso da planilha), ou desliga com -1. */
 function ativarAvisoDiario(hora) {
+  exigirConfigurador_();
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'avisarVencimentos') ScriptApp.deleteTrigger(t);
   });

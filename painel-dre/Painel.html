@@ -1272,6 +1272,15 @@
     conteudo.innerHTML = '<div class="vazio"><span class="carregando escuro"></span></div>';
     let cfg = { temPlanilha: false, temChave: false, planilha: '' };
     try { cfg = await chamar('obterConfig'); } catch (e) { /* mostra o formulário vazio */ }
+    if (cfg.podeConfigurar === false) {
+      conteudo.innerHTML = `<div class="cartao" style="max-width:640px">
+        <h2>Configurações</h2>
+        <p class="dica" style="margin:0">${cfg.temPlanilha ? `<span class="tag ok">planilha conectada</span> ${esc(cfg.planilha)}` : '<span class="tag erro">sem acesso à planilha</span>'}</p>
+        <p class="dica" style="margin:12px 0 0">Você entrou com a conta <strong>${esc(cfg.conta || 'Google')}</strong>. As configurações só podem ser mudadas pelo responsável pelo painel.
+          ${cfg.temPlanilha ? '' : 'Para usar o painel, peça a ele para compartilhar a planilha "Estoque O Barracão" com esta conta, como Editor.'}</p>
+      </div>`;
+      return;
+    }
     conteudo.innerHTML = `
       <div class="cartao" style="max-width:640px">
         <h2>Configurações</h2>
@@ -1363,7 +1372,9 @@
   }
 
   recarregar().catch((err) => {
-    if (!String(err && err.message).includes('CONFIGURAR')) toast('Erro ao carregar: ' + (err && err.message), true);
+    const msg = String(err && err.message || err);
+    if (msg.includes('SEM_ACESSO')) toast(msg.replace(/^.*SEM_ACESSO:\s*/, ''), true);
+    else if (!msg.includes('CONFIGURAR')) toast('Erro ao carregar: ' + msg, true);
     aba = 'config';
     render();
   });

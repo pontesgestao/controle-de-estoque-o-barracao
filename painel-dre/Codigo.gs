@@ -459,7 +459,13 @@ function conectarTelegram(token) {
     chats.push({ id: chat.id, nome: [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || 'Contato' });
   });
   p.setProperty('TELEGRAM_CHATS', JSON.stringify(chats));
-  if (!chats.length) throw new Error('Ninguém mandou mensagem para o robô ainda. Abra o robô no Telegram, toque em Iniciar (/start) e tente de novo.');
+  if (!chats.length) {
+    let robo = '';
+    try { robo = '@' + telegram_('getMe').username; } catch (e) { /* segue sem o nome */ }
+    throw new Error('O Telegram não tem nenhuma mensagem para o robô ' + (robo || 'deste token') + '. ' +
+      'Abra ' + (robo || 'esse robô') + ' no Telegram, mande uma mensagem (ex.: oi) e toque em Conectar de novo. ' +
+      'Se não for o robô que você criou, pegue o token certo no @BotFather (/mybots → o robô → API Token).');
+  }
   chats.forEach(function (c) {
     telegram_('sendMessage', { chat_id: c.id, text: '✅ Avisos de contas a pagar do O Barracão conectados.' });
   });

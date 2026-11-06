@@ -94,7 +94,7 @@ Confira com `git grep -i "fast shake\|fastshake\|fast-shake\|pontesgestao\|violi
 | Arquivo | O que trocar |
 | --- | --- |
 | `painel-dre/Codigo.gs` | `URL_TELA` (apontar para o **repositório novo**); `PASTA_FOTOS`; título no `doGet`; no prompt da IA em `lerNota`, o **segmento e o nome** do cliente; comentários do topo |
-| `painel-dre/Painel.html` | `<title>`; endereço da **logo** (GitHub Pages do repositório novo); texto "Link da planilha …"; link do aviso de atualização (repositório novo) |
+| `painel-dre/Painel.fonte.html` (depois rode `python3 painel-dre/montar.py`, que gera o `Painel.html`) | `<title>`; endereço da **logo** (GitHub Pages do repositório novo); texto "Link da planilha …"; link do aviso de atualização (repositório novo) |
 | `painel-dre/README.md` | nome do cliente e da planilha |
 
 Não mude `VERSAO_SERVIDOR`/`VERSAO_SERVIDOR_MINIMA` sem motivo. Quando alterar o `painel-dre/Codigo.gs` de um jeito que a tela dependa, aumente os dois juntos: assim o painel avisa o usuário para colar o código novo.

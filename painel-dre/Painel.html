@@ -112,6 +112,10 @@
   .itens-nota tr.revisar td { background: #FFFBEA; }
   .itens-nota tr.fora td { background: #F6F3F3; }
   .itens-nota .desc { font-size: .8rem; color: var(--suave); max-width: 220px; }
+  .botoes-arquivo { display: flex; gap: 10px; flex-wrap: wrap; }
+  .botoes-arquivo .btn { width: max-content; }
+  .cartao.salva { border: 2px solid var(--verde); background: var(--verde-claro); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .cartao.salva p { margin: 0; }
   .rodape-nota { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
   .carregando { display: inline-block; width: 16px; height: 16px; border: 3px solid rgba(255,255,255,.5); border-top-color: #fff; border-radius: 50%; animation: gira .8s linear infinite; }
   .carregando.escuro { border-color: rgba(39,51,147,.2); border-top-color: var(--azul); }
@@ -129,6 +133,29 @@
 
   @media (max-width: 760px) {
     .graficos { grid-template-columns: minmax(0, 1fr); }
+    /* Compras no celular: botão de câmera grande, itens da nota em cartões
+       e rodapé fixo com o total e o botão de salvar. */
+    .botoes-arquivo .btn { width: 100%; justify-content: center; }
+    .btn-camera { min-height: 56px; font-size: 1.1rem; }
+    .cartao.salva .btn { width: 100%; }
+    .itens-nota thead { display: none; }
+    .itens-nota, .itens-nota tbody, .itens-nota tr, .itens-nota td { display: block; width: 100%; }
+    .itens-nota tr { position: relative; border: 1px solid var(--borda); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: var(--cartao); }
+    .itens-nota tr.revisar { border-left: 5px solid #E0B000; }
+    .itens-nota tr.revisar td, .itens-nota tr.fora td { background: transparent; }
+    .itens-nota tr.fora { background: #F6F3F3; }
+    .itens-nota td { padding: 4px 0; border: 0; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .itens-nota td::before { content: attr(data-rot); font-size: .78rem; font-weight: 700; color: var(--suave); flex: none; max-width: 45%; }
+    .itens-nota td[data-rot="Item da nota"], .itens-nota td[data-rot="Produto do estoque"] { display: block; padding-right: 40px; }
+    .itens-nota td[data-rot="Item da nota"]::before, .itens-nota td[data-rot="Produto do estoque"]::before { display: block; margin-bottom: 2px; max-width: none; }
+    .itens-nota td[data-rot="Item da nota"] input, .itens-nota td select { width: 100%; }
+    .itens-nota .desc { max-width: none; }
+    .itens-nota td input.num { width: 110px !important; }
+    .itens-nota td.acao-item { position: absolute; top: 8px; right: 8px; width: auto; padding: 0; }
+    .itens-nota td.acao-item::before { content: none; }
+    .itens-nota td.acao-item .btn { min-height: 32px; padding: 0 10px; }
+    .rodape-nota { position: sticky; bottom: 0; z-index: 4; background: var(--cartao); margin: 14px -18px -18px; padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px)); border-radius: 0 0 var(--raio) var(--raio); border-top: 1px solid var(--borda); box-shadow: 0 -4px 12px rgba(0,0,0,.06); }
+    .rodape-nota .btn { width: 100%; min-height: 50px; }
     .topo .sub { display: none; }
     .kpi .valor { font-size: 1.4rem; }
   }
@@ -538,6 +565,9 @@
   }
 
   // ----- Compras -----
+  // Resumo da última compra salva, mostrado no topo da aba Compras com o
+  // atalho para lançar a próxima nota.
+  let ultimaSalva = null;
   function telaCompras() {
     const ls = lojas();
     const cat = catalogo();
@@ -562,6 +592,10 @@
     const somaItens = n.itens.reduce((s, it) => s + (numero(it.valor) || 0), 0);
 
     conteudo.innerHTML = `
+      ${ultimaSalva ? `<div class="cartao salva">
+        <p><strong>Compra salva:</strong> ${esc(ultimaSalva)}</p>
+        <button class="btn btn-primario" id="c-outra">📷 Lançar outra nota</button>
+      </div>` : ''}
       <div class="cartao">
         <h2>Lançar compra</h2>
         <p class="dica">Envie a foto ou o PDF da nota ou do cupom fiscal. A IA lê os itens e você confere antes de salvar. Cada item lançado atualiza o custo do produto (última compra).</p>
@@ -571,8 +605,12 @@
           <label class="campo">Fornecedor<input type="text" id="c-fornecedor" value="${esc(n.fornecedor)}"></label>
           <label class="campo">Nº da nota/cupom<input type="text" id="c-documento" value="${esc(n.documento)}"></label>
         </div>
-        <label class="btn btn-secundario" style="width:max-content">📎 Escolher fotos ou PDF da nota
-          <input type="file" id="c-fotos" accept="image/*,application/pdf,.pdf" multiple hidden></label>
+        <div class="botoes-arquivo">
+          <label class="btn btn-primario btn-camera">📷 ${n.fotos.length ? 'Fotografar outra folha' : 'Fotografar nota'}
+            <input type="file" id="c-camera" accept="image/*" capture="environment" hidden></label>
+          <label class="btn btn-secundario">📎 Galeria ou PDF
+            <input type="file" id="c-fotos" accept="image/*,application/pdf,.pdf" multiple hidden></label>
+        </div>
         <div class="fotos">${n.fotos.map((f, i) => `<div class="arquivo">${f.tipo === 'application/pdf'
           ? `<div class="pdf"><strong>PDF</strong>${esc(f.nome)}</div>`
           : `<img src="data:image/jpeg;base64,${f.dados}" alt="Foto da nota">`}
@@ -597,15 +635,15 @@
             const un = emb != null && por ? emb * por : null;
             const revisar = !fora && (!it.produto || !por || emb == null || it.confianca === 'baixa');
             return `<tr class="${fora ? 'fora' : revisar ? 'revisar' : ''}" data-i="${i}">
-              <td><input type="text" data-campo="descricao" value="${esc(it.descricao)}" placeholder="Descrição">
+              <td data-rot="Item da nota"><input type="text" data-campo="descricao" value="${esc(it.descricao)}" placeholder="Descrição">
                 ${it.unidadeNota ? `<div class="desc">Na nota: ${qtd(it.quantidadeNota)} ${esc(it.unidadeNota)}${it.confianca ? ' · confiança ' + esc(it.confianca) : ''}${it.impostos ? ` · inclui ${dinheiro(it.impostos)} de impostos` : ''}</div>` : ''}</td>
-              <td><select data-campo="produto">${opcoesProduto(it.produto)}</select></td>
-              <td class="r"><input class="num" style="width:80px;text-align:right" type="text" inputmode="decimal" data-campo="embalagens" value="${esc(it.embalagens)}" ${fora ? 'disabled' : ''}></td>
-              <td class="r"><input class="num" style="width:80px;text-align:right" type="text" inputmode="decimal" data-campo="porEmbalagem" value="${esc(it.porEmbalagem)}" ${fora ? 'disabled' : ''} placeholder="?"></td>
-              <td class="r num">${fora ? '–' : qtd(un)}</td>
-              <td class="r"><input class="num" style="width:100px;text-align:right" type="text" inputmode="decimal" data-campo="valor" value="${esc(it.valor)}"></td>
-              <td class="r num">${!fora && un && val != null ? dinheiro(val / un) : '–'}</td>
-              <td><button class="btn btn-perigo" data-remover="${i}" aria-label="Remover item">✕</button></td>
+              <td data-rot="Produto do estoque"><select data-campo="produto">${opcoesProduto(it.produto)}</select></td>
+              <td class="r" data-rot="Embalagens"><input class="num" style="width:80px;text-align:right" type="text" inputmode="decimal" data-campo="embalagens" value="${esc(it.embalagens)}" ${fora ? 'disabled' : ''}></td>
+              <td class="r" data-rot="Unid. ou kg por embalagem"><input class="num" style="width:80px;text-align:right" type="text" inputmode="decimal" data-campo="porEmbalagem" value="${esc(it.porEmbalagem)}" ${fora ? 'disabled' : ''} placeholder="?"></td>
+              <td class="r num" data-rot="Total (un. ou kg)">${fora ? '–' : qtd(un)}</td>
+              <td class="r" data-rot="Valor (R$)"><input class="num" style="width:100px;text-align:right" type="text" inputmode="decimal" data-campo="valor" value="${esc(it.valor)}"></td>
+              <td class="r num" data-rot="Custo por un. ou kg">${!fora && un && val != null ? dinheiro(val / un) : '–'}</td>
+              <td class="acao-item"><button class="btn btn-perigo" data-remover="${i}" aria-label="Remover item">✕</button></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>
@@ -645,7 +683,7 @@
     };
     ['c-loja', 'c-dia', 'c-fornecedor', 'c-documento'].forEach((id) => { document.getElementById(id).onchange = lerCampos; });
 
-    document.getElementById('c-fotos').onchange = async (e) => {
+    const receberArquivos = async (e) => {
       lerCampos();
       const arquivos = [...e.target.files];
       for (const a of arquivos) {
@@ -654,6 +692,10 @@
       }
       render();
     };
+    document.getElementById('c-fotos').onchange = receberArquivos;
+    document.getElementById('c-camera').onchange = receberArquivos;
+    const outra = document.getElementById('c-outra');
+    if (outra) outra.onclick = () => { ultimaSalva = null; document.getElementById('c-camera').click(); };
     conteudo.querySelectorAll('[data-remover-arquivo]').forEach((b) => {
       b.onclick = () => { lerCampos(); n.fotos.splice(Number(b.dataset.removerArquivo), 1); render(); };
     });
@@ -669,6 +711,7 @@
       lerCampos();
       if (!dados.temChave) { toast('Cadastre a chave da API em Configurações.', true); return; }
       if (n.itens.length && !confirm('Ler de novo substitui os itens da tabela. Continuar?')) return;
+      ultimaSalva = null;
       const b = e.currentTarget;
       b.disabled = true;
       b.innerHTML = '<span class="carregando"></span> Lendo a nota… (até 1 minuto)';
@@ -757,8 +800,10 @@
       salvar.innerHTML = '<span class="carregando"></span> Salvando…';
       const dadosCompra = { loja: n.loja, dia: n.dia, fornecedor: n.fornecedor, documento: n.documento, fotos: n.fotos, itens };
       const concluir = async (r) => {
+        ultimaSalva = `${n.fornecedor || 'nota'}${n.documento ? ' nº ' + n.documento : ''} · ${diaBR(n.dia)} · ${dinheiro(itens.reduce((s, it) => s + (it.valor || 0), 0))}`;
         notaRascunho = null;
         await recarregar();
+        window.scrollTo(0, 0);
         toast(r && r.avisoFotos ? 'Compra salva, mas sem a foto: ' + r.avisoFotos : 'Compra salva e custos atualizados', !!(r && r.avisoFotos));
       };
       try {

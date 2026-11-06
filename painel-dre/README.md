@@ -57,6 +57,16 @@ A chave fica guardada nas propriedades do seu projeto do Google e nunca aparece 
 ### 4. Cadastrar os custos iniciais
 Na aba **Custos**, preencha o custo por unidade dos produtos (os sem custo aparecem primeiro). Depois disso, cada nota lançada mantém os custos atualizados.
 
+### 5. Contas a pagar e aviso no Telegram (opcional)
+Na aba **Contas**, fotografe o boleto (ou envie o PDF): a IA lê beneficiário, valor, vencimento e linha digitável. Confira e salve. Cada conta tem **Copiar** (linha digitável) e **Marcar como paga**. As contas ficam na aba **Contas a pagar** da planilha.
+
+Para receber as contas do dia no Telegram:
+1. No Telegram, abra o **@BotFather**, envie `/newbot` e escolha um nome. Ele responde com o **token** do robô.
+2. Abra o robô pelo link que o BotFather mandou e toque em **Iniciar**. Cada pessoa que vai receber o aviso faz isso.
+3. No painel, em **Configurações → Aviso de contas no Telegram**, cole o token, toque em **Conectar**, escolha o horário e toque em **Ligar aviso diário**.
+
+Todo dia, no horário escolhido, o robô manda as contas **vencidas**, as que **vencem hoje** (com a linha digitável para copiar) e as de **amanhã**. Sem contas, não manda nada. Use **Enviar teste** para conferir.
+
 ## Rotina semanal
 
 1. **Segunda:** cada loja envia a contagem pelo app (como hoje).

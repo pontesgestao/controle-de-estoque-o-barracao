@@ -21,13 +21,16 @@ const CAB_CUSTOS = ['Categoria', 'Produto', 'Custo por unidade (R$)', 'Vigente d
 const CAB_FATURAMENTO = ['Loja', 'Contagem inicial (ID)', 'Contagem final (ID)', 'Início', 'Fim', 'Faturamento (R$)', 'Atualizado em'];
 const CAB_IGNORADAS = ['ID contagem', 'Loja', 'Data', 'Ignorada em'];
 const CAB_PRODUTOS = ['Categoria', 'Produto', 'Criado em'];
+const ABA_CONTAS = 'Contas a pagar';
+const CAB_CONTAS = ['ID', 'Vencimento', 'Beneficiário', 'Descrição', 'Valor (R$)', 'Linha digitável', 'Situação',
+  'Pago em', 'Arquivo', 'Lançado em'];
 
 const MODELO_IA = 'claude-opus-5-5';
 const PASTA_FOTOS = 'O Barracão - Notas fiscais';
 
 // Versão desta parte do código (a que fica colada no Google). A tela avisa
 // quando precisa de uma versão mais nova.
-const VERSAO_SERVIDOR = 3;
+const VERSAO_SERVIDOR = 4;
 
 // A tela do painel vem do GitHub a cada abertura, assim as melhorias chegam
 // sem precisar colar nada. Sem conexão com o GitHub, usa a cópia local "Painel".
@@ -61,7 +64,7 @@ function obterConfig() {
   if (p.getProperty('PLANILHA_ID')) {
     try { nome = planilha_().getName(); } catch (e) { nome = ''; }
   }
-  return { planilha: nome, temPlanilha: !!nome, temChave: !!p.getProperty('ANTHROPIC_API_KEY') };
+  return { planilha: nome, temPlanilha: !!nome, temChave: !!p.getProperty('ANTHROPIC_API_KEY'), telegram: estadoTelegram_() };
 }
 
 function salvarConfig(cfg) {
@@ -113,7 +116,14 @@ function carregarDados() {
     return { loja: String(r[0]), inicial: String(r[1]), final: String(r[2]), valor: num_(r[5]) };
   });
 
+  const contas = linhas_(ss, ABA_CONTAS, CAB_CONTAS).map(function (r) {
+    return { id: String(r[0]), vencimento: fmt(r[1], 'yyyy-MM-dd'), beneficiario: String(r[2]), descricao: String(r[3]),
+      valor: num_(r[4]), linha: String(r[5]), situacao: String(r[6]), pagoEm: fmt(r[7], 'yyyy-MM-dd'), arquivo: String(r[8]) };
+  });
+
   return {
+    contas: contas,
+    telegram: estadoTelegram_(),
     contagens: Object.keys(contagens).map(function (k) { return contagens[k]; }),
     ignoradas: ignoradas, produtosNovos: produtosNovos, compras: compras, custos: custos, faturamento: faturamento,
     temChave: !!props_().getProperty('ANTHROPIC_API_KEY'),
@@ -272,6 +282,234 @@ function excluirCompra(id) {
   return true;
 }
 
+// ---------- Contas a pagar (boletos) ----------
+
+/** Lê boletos (foto ou PDF; um PDF pode ter vários, como um carnê). */
+function lerBoleto(fotos) {
+  const instrucoes =
+    'Você lê fotos e PDFs de boletos bancários brasileiros recebidos por um restaurante (O Barracão) ' +
+    'e extrai os dados para a lista de contas a pagar. Um arquivo pode ter mais de um boleto (carnê, parcelas): ' +
+    'devolva um item por boleto.\n\n' +
+    'Para cada boleto, informe:\n' +
+    '- beneficiario: quem recebe (campo "Beneficiário" ou "Cedente"), nome curto, sem CNPJ.\n' +
+    '- descricao: o que é, em poucas palavras, se der para saber (ex.: "Nota 384070", "Parcela 2/3"); senão vazio.\n' +
+    '- valor: o valor do documento em reais (use o "Valor cobrado" se houver desconto ou juros já calculados).\n' +
+    '- vencimento: a data de vencimento no formato AAAA-MM-DD.\n' +
+    '- linhaDigitavel: a linha digitável completa, só os números (47 dígitos para boleto bancário, 48 para ' +
+    'contas de consumo/convênio). Confira dígito a dígito; deixe vazio se não estiver legível.\n' +
+    '- confianca: "alta", "media" ou "baixa".\n\n' +
+    'Em "aviso", escreva em português, numa frase curta, o que a pessoa precisa saber (ex.: linha ilegível, ' +
+    'não parece um boleto). Deixe vazio quando não houver nada. Não invente valores.';
+  const conteudo = anexos_(fotos);
+  conteudo.push({ type: 'text', text: 'Extraia os dados deste(s) boleto(s).' });
+  const esquema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['aviso', 'boletos'],
+    properties: {
+      aviso: { type: 'string' },
+      boletos: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['beneficiario', 'descricao', 'valor', 'vencimento', 'linhaDigitavel', 'confianca'],
+          properties: {
+            beneficiario: { type: 'string' },
+            descricao: { type: 'string' },
+            valor: { type: 'number' },
+            vencimento: { type: 'string' },
+            linhaDigitavel: { type: 'string' },
+            confianca: { type: 'string', enum: ['alta', 'media', 'baixa'] },
+          },
+        },
+      },
+    },
+  };
+  const r = chamarIA_(instrucoes, conteudo, esquema, 'o boleto');
+  (r.boletos || []).forEach(function (b) { b.linhaDigitavel = String(b.linhaDigitavel || '').replace(/\D/g, ''); });
+  return r;
+}
+
+/** Grava uma ou mais contas. lote: { contas: [...], fotos: [...] }. */
+function salvarContas(lote) {
+  const ss = planilha_();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const agora = new Date();
+    let arquivo = '';
+    let avisoFotos = '';
+    if (lote.fotos && lote.fotos.length) {
+      try {
+        const pasta = pastaFotos_();
+        arquivo = lote.fotos.map(function (arq, i) {
+          const pdf = arq.tipo === 'application/pdf';
+          const blob = Utilities.newBlob(Utilities.base64Decode(arq.dados), pdf ? 'application/pdf' : 'image/jpeg',
+            'Boleto ' + (lote.contas[0] ? lote.contas[0].beneficiario : '') + ' ' + (i + 1) + (pdf ? '.pdf' : '.jpg'));
+          return pasta.createFile(blob).getUrl();
+        }).join(' ');
+      } catch (e) {
+        arquivo = '';
+        avisoFotos = 'o Google Drive recusou o arquivo (' + String(e && e.message || e) + ').';
+      }
+    }
+    const linhas = (lote.contas || []).map(function (c) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(c.vencimento))) throw new Error('Informe o vencimento de todas as contas.');
+      const valor = Number(c.valor);
+      if (!isFinite(valor) || valor <= 0) throw new Error('Informe o valor de todas as contas.');
+      return [Utilities.getUuid().slice(0, 8), new Date(c.vencimento + 'T12:00:00'), texto_(c.beneficiario), texto_(c.descricao),
+        valor, "'" + String(c.linha || '').replace(/\D/g, ''), 'A pagar', '', arquivo, agora];
+    });
+    if (!linhas.length) throw new Error('Nenhuma conta para salvar.');
+    const aba = aba_(ss, ABA_CONTAS, CAB_CONTAS);
+    aba.getRange(aba.getLastRow() + 1, 1, linhas.length, CAB_CONTAS.length).setValues(linhas);
+    aba.getRange(2, 2, aba.getLastRow() - 1, 1).setNumberFormat('dd/MM/yyyy');
+    return { gravadas: linhas.length, avisoFotos: avisoFotos };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Marca (ou desmarca) uma conta como paga. */
+function marcarContaPaga(id, paga) {
+  const aba = aba_(planilha_(), ABA_CONTAS, CAB_CONTAS);
+  const valores = aba.getDataRange().getValues();
+  for (let i = 1; i < valores.length; i++) {
+    if (String(valores[i][0]) === String(id)) {
+      aba.getRange(i + 1, 7, 1, 2).setValues([[paga ? 'Paga' : 'A pagar', paga ? new Date() : '']]);
+      if (paga) aba.getRange(i + 1, 8).setNumberFormat('dd/MM/yyyy');
+      return true;
+    }
+  }
+  throw new Error('Conta não encontrada. Recarregue o painel.');
+}
+
+function excluirConta(id) {
+  const aba = aba_(planilha_(), ABA_CONTAS, CAB_CONTAS);
+  const valores = aba.getDataRange().getValues();
+  for (let i = valores.length - 1; i >= 1; i--) {
+    if (String(valores[i][0]) === String(id)) aba.deleteRow(i + 1);
+  }
+  return true;
+}
+
+// ---------- Aviso de vencimentos pelo Telegram ----------
+
+function estadoTelegram_() {
+  const p = props_();
+  const chats = JSON.parse(p.getProperty('TELEGRAM_CHATS') || '[]');
+  const hora = p.getProperty('AVISO_HORA');
+  const ativo = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'avisarVencimentos'; });
+  return { temToken: !!p.getProperty('TELEGRAM_TOKEN'), chats: chats.map(function (c) { return c.nome; }),
+    ativo: ativo, hora: hora ? Number(hora) : null };
+}
+
+function telegram_(metodo, dados) {
+  const token = props_().getProperty('TELEGRAM_TOKEN');
+  if (!token) throw new Error('Cadastre o token do robô do Telegram.');
+  const r = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/' + metodo, {
+    method: 'post', contentType: 'application/json', payload: JSON.stringify(dados || {}), muteHttpExceptions: true,
+  });
+  const json = JSON.parse(r.getContentText() || '{}');
+  if (!json.ok) {
+    if (r.getResponseCode() === 401 || r.getResponseCode() === 404) throw new Error('Token do Telegram inválido. Confira com o @BotFather.');
+    throw new Error('Telegram: ' + (json.description || 'HTTP ' + r.getResponseCode()));
+  }
+  return json.result;
+}
+
+/**
+ * Guarda o token (se vier) e cadastra quem mandou mensagem para o robô.
+ * Cada pessoa que vai receber o aviso manda /start para o robô antes.
+ */
+function conectarTelegram(token) {
+  const p = props_();
+  if (token) p.setProperty('TELEGRAM_TOKEN', String(token).trim());
+  const atualizacoes = telegram_('getUpdates', { allowed_updates: ['message'] }) || [];
+  const chats = JSON.parse(p.getProperty('TELEGRAM_CHATS') || '[]');
+  atualizacoes.forEach(function (u) {
+    const chat = u.message && u.message.chat;
+    if (!chat || chat.type !== 'private') return;
+    if (chats.some(function (c) { return c.id === chat.id; })) return;
+    chats.push({ id: chat.id, nome: [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || 'Contato' });
+  });
+  p.setProperty('TELEGRAM_CHATS', JSON.stringify(chats));
+  if (!chats.length) throw new Error('Ninguém mandou mensagem para o robô ainda. Abra o robô no Telegram, toque em Iniciar (/start) e tente de novo.');
+  chats.forEach(function (c) {
+    telegram_('sendMessage', { chat_id: c.id, text: '✅ Avisos de contas a pagar do O Barracão conectados.' });
+  });
+  return estadoTelegram_();
+}
+
+function desconectarTelegram() {
+  const p = props_();
+  p.deleteProperty('TELEGRAM_CHATS');
+  ativarAvisoDiario(-1);
+  return estadoTelegram_();
+}
+
+/** Liga o aviso diário na hora pedida (fuso da planilha), ou desliga com -1. */
+function ativarAvisoDiario(hora) {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'avisarVencimentos') ScriptApp.deleteTrigger(t);
+  });
+  const h = Number(hora);
+  if (h >= 0 && h <= 23) {
+    ScriptApp.newTrigger('avisarVencimentos').timeBased().atHour(h).nearMinute(0).everyDays(1)
+      .inTimezone(planilha_().getSpreadsheetTimeZone()).create();
+    props_().setProperty('AVISO_HORA', String(h));
+  } else {
+    props_().deleteProperty('AVISO_HORA');
+  }
+  return estadoTelegram_();
+}
+
+/** Roda todo dia pelo acionador. teste = true manda mesmo sem contas. */
+function avisarVencimentos(teste) {
+  const ss = planilha_();
+  const tz = ss.getSpreadsheetTimeZone();
+  const dia = function (d) { return Utilities.formatDate(d, tz, 'yyyy-MM-dd'); };
+  const agora = new Date();
+  const hoje = dia(agora);
+  const amanha = dia(new Date(agora.getTime() + 24 * 3600 * 1000));
+  const contas = linhas_(ss, ABA_CONTAS, CAB_CONTAS)
+    .filter(function (r) { return String(r[6]) !== 'Paga' && r[1] instanceof Date; })
+    .map(function (r) { return { venc: dia(r[1]), benef: String(r[2]), desc: String(r[3]), valor: Number(r[4]) || 0, linha: String(r[5]) }; })
+    .sort(function (a, b) { return a.venc < b.venc ? -1 : a.venc > b.venc ? 1 : 0; });
+  const grupos = [
+    ['🔴 VENCIDAS', contas.filter(function (c) { return c.venc < hoje; }), false],
+    ['🟠 VENCEM HOJE', contas.filter(function (c) { return c.venc === hoje; }), true],
+    ['🟡 VENCEM AMANHÃ', contas.filter(function (c) { return c.venc === amanha; }), true],
+  ].filter(function (g) { return g[1].length; });
+  const chats = JSON.parse(props_().getProperty('TELEGRAM_CHATS') || '[]');
+  if (!chats.length) throw new Error('Conecte o Telegram primeiro.');
+  if (!grupos.length && !teste) return 0;
+
+  const brl = function (v) { return 'R$ ' + v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
+  const html = function (t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+  const ddmm = function (d) { return d.slice(8, 10) + '/' + d.slice(5, 7); };
+  let texto = '<b>📅 O Barracão · contas a pagar · ' + ddmm(hoje) + '</b>\n';
+  if (!grupos.length) texto += '\nNenhuma conta vencida, para hoje ou para amanhã. Este é um teste do aviso. ✅';
+  let total = 0;
+  grupos.forEach(function (g) {
+    const soma = g[1].reduce(function (s, c) { return s + c.valor; }, 0);
+    total += soma;
+    texto += '\n<b>' + g[0] + ' (' + g[1].length + ') · ' + brl(soma) + '</b>\n';
+    g[1].forEach(function (c) {
+      texto += '• ' + ddmm(c.venc) + ' ' + html(c.benef) + (c.desc ? ' (' + html(c.desc) + ')' : '') + ' · ' + brl(c.valor) + '\n';
+      if (g[2] && c.linha) texto += '<code>' + html(c.linha) + '</code>\n';
+    });
+  });
+  if (grupos.length) texto += '\n<b>Total: ' + brl(total) + '</b>\nToque na linha digitável para copiar.';
+  chats.forEach(function (c) {
+    telegram_('sendMessage', { chat_id: c.id, text: texto.slice(0, 4000), parse_mode: 'HTML', disable_web_page_preview: true });
+  });
+  return grupos.length;
+}
+
+function testarTelegram() { avisarVencimentos(true); return true; }
+
 // ---------- Leitura da nota com IA ----------
 
 /**
@@ -314,12 +552,7 @@ function lerNota(fotos, catalogo) {
     'outras despesas, ou se algum item ficou ilegível. Deixe vazio quando não houver nada.\n\n' +
     'Catálogo de produtos do estoque (número | categoria | produto):\n' + listaProdutos;
 
-  const conteudo = fotos.map(function (arq) {
-    if (arq.tipo === 'application/pdf') {
-      return { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: arq.dados } };
-    }
-    return { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: arq.dados } };
-  });
+  const conteudo = anexos_(fotos);
   conteudo.push({ type: 'text', text: 'Extraia os itens desta nota/cupom fiscal.' });
 
   const esquema = {
@@ -355,6 +588,14 @@ function lerNota(fotos, catalogo) {
     },
   };
 
+  return chamarIA_(instrucoes, conteudo, esquema, 'a nota');
+}
+
+// Chama o Claude com as instruções, os arquivos e o formato de resposta
+// esperado (JSON). oQue entra nas mensagens de erro ("a nota", "o boleto").
+function chamarIA_(instrucoes, conteudo, esquema, oQue) {
+  const chave = props_().getProperty('ANTHROPIC_API_KEY');
+  if (!chave) throw new Error('Cadastre a chave da API na aba Configurações.');
   const corpo = {
     model: MODELO_IA,
     max_tokens: 16000,
@@ -385,13 +626,23 @@ function lerNota(fotos, catalogo) {
     const msg = json.error && json.error.message ? json.error.message : 'HTTP ' + status;
     if (status === 401) throw new Error('Chave da API inválida. Confira em Configurações.');
     if (status === 429 || status === 529) throw new Error('Serviço da IA ocupado no momento. Tente de novo em instantes.');
-    throw new Error('Erro ao ler a nota: ' + msg);
+    throw new Error('Erro ao ler ' + oQue + ': ' + msg);
   }
-  if (json.stop_reason === 'refusal') throw new Error('A IA não conseguiu processar esta imagem. Lance os itens manualmente.');
-  if (json.stop_reason === 'max_tokens') throw new Error('A nota é longa demais para uma leitura só. Envie em partes (menos arquivos por vez).');
+  if (json.stop_reason === 'refusal') throw new Error('A IA não conseguiu processar esta imagem. Lance manualmente.');
+  if (json.stop_reason === 'max_tokens') throw new Error('O arquivo é longo demais para uma leitura só. Envie em partes (menos arquivos por vez).');
 
   const texto = (json.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
   return JSON.parse(texto);
+}
+
+// Fotos e PDFs no formato que a API do Claude recebe.
+function anexos_(fotos) {
+  return fotos.map(function (arq) {
+    if (arq.tipo === 'application/pdf') {
+      return { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: arq.dados } };
+    }
+    return { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: arq.dados } };
+  });
 }
 
 // ---------- Utilidades ----------

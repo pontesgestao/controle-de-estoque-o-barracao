@@ -116,6 +116,35 @@
   .botoes-arquivo .btn { width: max-content; }
   .cartao.salva { border: 2px solid var(--verde); background: var(--verde-claro); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .cartao.salva p { margin: 0; }
+  /* Contas a pagar */
+  .resumo-contas { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .resumo-contas .kpi.vencida { border-left: 5px solid var(--erro); }
+  .resumo-contas .kpi.hoje { border-left: 5px solid #E07B00; }
+  .resumo-contas .kpi.semana { border-left: 5px solid #E0B000; }
+  .lista-contas { display: flex; flex-direction: column; gap: 10px; }
+  .conta { border: 1px solid var(--borda); border-left: 5px solid var(--borda); border-radius: 12px; padding: 12px 14px; background: var(--cartao);
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 14px; align-items: center; }
+  .conta.vencida { border-left-color: var(--erro); background: var(--erro-claro); }
+  .conta.hoje { border-left-color: #E07B00; background: #FFF1E0; }
+  .conta.semana { border-left-color: #E0B000; }
+  .conta.paga { opacity: .7; }
+  .conta .data { font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 1.15rem; text-align: center; line-height: 1.05; min-width: 54px; }
+  .conta .data small { display: block; font-family: 'Nunito', sans-serif; font-size: .7rem; font-weight: 800; text-transform: uppercase; color: var(--suave); }
+  .conta.vencida .data small { color: var(--erro); }
+  .conta.hoje .data small { color: #A65A00; }
+  .conta .quem { min-width: 0; }
+  .conta .quem strong { display: block; overflow-wrap: anywhere; }
+  .conta .quem span { color: var(--suave); font-size: .85rem; }
+  .conta .valor { font-weight: 800; font-size: 1.05rem; text-align: right; white-space: nowrap; }
+  .conta .linha-dig { grid-column: 1 / -1; display: flex; gap: 6px; align-items: center; min-width: 0; }
+  .conta .linha-dig input { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .8rem; min-height: 36px; padding: 4px 8px; flex: 1; min-width: 0; }
+  .conta .acoes-conta { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .boleto-form { border: 1px solid var(--borda); border-radius: 12px; padding: 12px; margin-bottom: 10px; position: relative; }
+  .boleto-form.revisar { border-left: 5px solid #E0B000; }
+  .boleto-form .grade-form { margin-bottom: 0; }
+  .boleto-form .remover-boleto { position: absolute; top: 6px; right: 8px; }
+  .telegram-passos { margin: 0 0 12px; padding-left: 20px; color: var(--suave); font-size: .9rem; }
+  .telegram-passos li { margin-bottom: 4px; }
   .rodape-nota { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
   .carregando { display: inline-block; width: 16px; height: 16px; border: 3px solid rgba(255,255,255,.5); border-top-color: #fff; border-radius: 50%; animation: gira .8s linear infinite; }
   .carregando.escuro { border-color: rgba(39,51,147,.2); border-top-color: var(--azul); }
@@ -156,6 +185,9 @@
     .itens-nota td.acao-item .btn { min-height: 32px; padding: 0 10px; }
     .rodape-nota { position: sticky; bottom: 0; z-index: 4; background: var(--cartao); margin: 14px -18px -18px; padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px)); border-radius: 0 0 var(--raio) var(--raio); border-top: 1px solid var(--borda); box-shadow: 0 -4px 12px rgba(0,0,0,.06); }
     .rodape-nota .btn { width: 100%; min-height: 50px; }
+    .conta { grid-template-columns: auto minmax(0, 1fr); }
+    .conta .valor { grid-column: 2; text-align: left; }
+    .conta .acoes-conta .btn { flex: 1; }
     .topo .sub { display: none; }
     .kpi .valor { font-size: 1.4rem; }
   }
@@ -172,6 +204,7 @@
   <nav class="abas" role="tablist">
     <button role="tab" data-aba="resultado">Resultado</button>
     <button role="tab" data-aba="compras">Compras</button>
+    <button role="tab" data-aba="contas">Contas</button>
     <button role="tab" data-aba="custos">Custos</button>
     <button role="tab" data-aba="contagens">Contagens</button>
     <button role="tab" data-aba="config">Configurações</button>
@@ -225,6 +258,7 @@
   let lojaSel = null;
   let periodoSel = null;
   let notaRascunho = null;
+  let boletoRascunho = null;
   let buscaProduto = '';
 
   document.querySelectorAll('nav.abas button').forEach((b) => {
@@ -369,7 +403,7 @@
     document.querySelectorAll('nav.abas button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.aba === aba)));
     if (!dados && aba !== 'config') { aba = 'config'; return render(); }
     if (dados) prepararCustos();
-    ({ resultado: telaResultado, compras: telaCompras, custos: telaCustos, contagens: telaContagens, config: telaConfig })[aba]();
+    ({ resultado: telaResultado, compras: telaCompras, contas: telaContas, custos: telaCustos, contagens: telaContagens, config: telaConfig })[aba]();
   }
 
   // ----- Resultado -----
@@ -941,6 +975,217 @@
     });
   }
 
+  // ----- Contas a pagar -----
+  function situacaoConta(c, h, semana) {
+    if (c.situacao === 'Paga') return 'paga';
+    if (c.vencimento < h) return 'vencida';
+    if (c.vencimento === h) return 'hoje';
+    if (c.vencimento <= semana) return 'semana';
+    return 'futura';
+  }
+  function somarDias(d, n) { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); }
+  function copiar(texto, campo) {
+    const ok = () => toast('Linha digitável copiada');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(texto).then(ok).catch(() => { campo.select(); try { document.execCommand('copy'); ok(); } catch (e) { toast('Selecione e copie a linha', true); } });
+    } else { campo.select(); try { document.execCommand('copy'); ok(); } catch (e) { toast('Selecione e copie a linha', true); } }
+  }
+  function linhaFormatada(l) {
+    const d = String(l || '').replace(/\D/g, '');
+    if (d.length === 47) return `${d.slice(0, 5)}.${d.slice(5, 10)} ${d.slice(10, 15)}.${d.slice(15, 21)} ${d.slice(21, 26)}.${d.slice(26, 32)} ${d.slice(32, 33)} ${d.slice(33)}`;
+    if (d.length === 48) return d.match(/.{1,12}/g).join(' ');
+    return d;
+  }
+
+  function telaContas() {
+    if (!dados.contas) {
+      conteudo.innerHTML = '<div class="cartao vazio">Para usar as contas a pagar, atualize o código do painel no Google (aviso vermelho no topo).</div>';
+      return;
+    }
+    const h = hoje(), semana = somarDias(h, 7);
+    const aPagar = dados.contas.filter((c) => c.situacao !== 'Paga').sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+    const pagas = dados.contas.filter((c) => c.situacao === 'Paga').sort((a, b) => (b.pagoEm || '').localeCompare(a.pagoEm || '')).slice(0, 15);
+    const grupo = (sit) => aPagar.filter((c) => situacaoConta(c, h, semana) === sit);
+    const soma = (l) => l.reduce((s, c) => s + (c.valor || 0), 0);
+    const venc = grupo('vencida'), deHoje = grupo('hoje'), daSemana = grupo('semana');
+    const tg = dados.telegram || {};
+    if (!boletoRascunho) boletoRascunho = { fotos: [], boletos: [], aviso: '' };
+    const b = boletoRascunho;
+
+    const cartaoConta = (c) => {
+      const sit = situacaoConta(c, h, semana);
+      const rotulo = { vencida: 'vencida', hoje: 'hoje', semana: 'em breve', futura: '', paga: 'paga' }[sit];
+      return `<div class="conta ${sit}" data-id="${esc(c.id)}">
+        <div class="data">${diaCurto(c.vencimento)}<small>${rotulo}</small></div>
+        <div class="quem"><strong>${esc(c.beneficiario || 'Sem beneficiário')}</strong>${c.descricao ? `<span>${esc(c.descricao)}</span>` : ''}${sit === 'paga' && c.pagoEm ? `<span> · paga em ${diaBR(c.pagoEm)}</span>` : ''}</div>
+        <div class="valor num">${dinheiro(c.valor)}</div>
+        ${c.linha && sit !== 'paga' ? `<div class="linha-dig"><input type="text" readonly value="${esc(linhaFormatada(c.linha))}" aria-label="Linha digitável"><button class="btn btn-secundario" data-copiar="${esc(c.linha)}">Copiar</button></div>` : ''}
+        <div class="acoes-conta">
+          ${c.arquivo ? c.arquivo.split(' ').map((u, i) => `<a class="btn-texto" href="${esc(u)}" target="_blank" rel="noopener">boleto${c.arquivo.includes(' ') ? ' ' + (i + 1) : ''}</a>`).join('') : ''}
+          <button class="btn btn-perigo" data-excluir-conta="${esc(c.id)}">Excluir</button>
+          ${sit === 'paga' ? `<button class="btn btn-texto" data-paga="0" data-conta="${esc(c.id)}">Desfazer pagamento</button>`
+            : `<button class="btn btn-azul" data-paga="1" data-conta="${esc(c.id)}">✓ Marcar como paga</button>`}
+        </div>
+      </div>`;
+    };
+
+    conteudo.innerHTML = `
+      <div class="resumo-contas">
+        <div class="kpi vencida"><div class="rotulo">Vencidas</div><div class="valor num">${dinheiro(soma(venc))}</div><div class="detalhe">${venc.length} conta${venc.length === 1 ? '' : 's'}</div></div>
+        <div class="kpi hoje"><div class="rotulo">Vencem hoje</div><div class="valor num">${dinheiro(soma(deHoje))}</div><div class="detalhe">${deHoje.length} conta${deHoje.length === 1 ? '' : 's'}</div></div>
+        <div class="kpi semana"><div class="rotulo">Próximos 7 dias</div><div class="valor num">${dinheiro(soma(daSemana))}</div><div class="detalhe">${daSemana.length} conta${daSemana.length === 1 ? '' : 's'}</div></div>
+        <div class="kpi destaque"><div class="rotulo">Total a pagar</div><div class="valor num">${dinheiro(soma(aPagar))}</div><div class="detalhe">${aPagar.length} conta${aPagar.length === 1 ? '' : 's'}</div></div>
+      </div>
+      ${tg.ativo ? '' : `<p class="alerta" style="margin-bottom:16px"><strong>Aviso no Telegram desligado</strong>Ligue em <button class="btn-texto" id="ir-config" style="padding:0">Configurações</button> para receber as contas do dia no celular.</p>`}
+
+      <div class="cartao">
+        <h2>Lançar boleto</h2>
+        <p class="dica">Fotografe o boleto ou envie o PDF. A IA lê beneficiário, valor, vencimento e linha digitável; confira e salve.</p>
+        <div class="botoes-arquivo">
+          <label class="btn btn-primario btn-camera">📷 ${b.fotos.length ? 'Fotografar outra página' : 'Fotografar boleto'}
+            <input type="file" id="b-camera" accept="image/*" capture="environment" hidden></label>
+          <label class="btn btn-secundario">📎 Galeria ou PDF
+            <input type="file" id="b-fotos" accept="image/*,application/pdf,.pdf" multiple hidden></label>
+        </div>
+        <div class="fotos">${b.fotos.map((f, i) => `<div class="arquivo">${f.tipo === 'application/pdf'
+          ? `<div class="pdf"><strong>PDF</strong>${esc(f.nome)}</div>`
+          : `<img src="data:image/jpeg;base64,${f.dados}" alt="Foto do boleto">`}
+          <button class="remover" data-remover-boleto-arq="${i}" aria-label="Remover arquivo">✕</button></div>`).join('')}</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primario" id="b-ler" ${b.fotos.length ? '' : 'disabled'}>Ler boleto com IA</button>
+          <button class="btn btn-texto" id="b-manual">+ Lançar à mão</button>
+          ${b.fotos.length || b.boletos.length ? '<button class="btn btn-perigo" id="b-limpar">Limpar</button>' : ''}
+        </div>
+        ${b.aviso ? `<p class="alerta" style="margin-top:12px"><strong>Aviso da leitura</strong>${esc(b.aviso)}</p>` : ''}
+        ${b.boletos.length ? `<div style="margin-top:14px">
+          ${b.boletos.map((x, i) => `<div class="boleto-form ${x.confianca === 'baixa' || !x.vencimento || !numero(x.valor) ? 'revisar' : ''}" data-i="${i}">
+            <button class="btn btn-perigo remover-boleto" data-remover-boleto="${i}" aria-label="Remover boleto">✕</button>
+            <div class="grade-form">
+              <label class="campo">Beneficiário<input type="text" data-campo="beneficiario" value="${esc(x.beneficiario)}"></label>
+              <label class="campo">Descrição<input type="text" data-campo="descricao" value="${esc(x.descricao)}" placeholder="Ex.: Nota 384070"></label>
+              <label class="campo">Valor (R$)<input type="text" inputmode="decimal" class="num" data-campo="valor" value="${esc(x.valor)}"></label>
+              <label class="campo">Vencimento<input type="date" data-campo="vencimento" value="${esc(x.vencimento)}"></label>
+            </div>
+            <label class="campo" style="margin-top:10px">Linha digitável<input type="text" inputmode="numeric" class="num" data-campo="linha" value="${esc(linhaFormatada(x.linha))}" placeholder="Só os números"></label>
+            ${x.confianca ? `<p class="dica" style="margin:6px 0 0">Leitura com confiança ${esc(x.confianca)}${x.linha && ![47, 48].includes(x.linha.replace(/\D/g, '').length) ? ' · <strong>a linha digitável parece incompleta</strong>' : ''}</p>` : ''}
+          </div>`).join('')}
+          <button class="btn btn-azul" id="b-salvar" style="width:100%">Salvar ${b.boletos.length > 1 ? b.boletos.length + ' contas' : 'conta'}</button>
+        </div>` : ''}
+      </div>
+
+      <div class="cartao">
+        <h2>A pagar</h2>
+        ${aPagar.length ? `<div class="lista-contas">${aPagar.map(cartaoConta).join('')}</div>` : '<div class="vazio">Nenhuma conta a pagar. Lance o próximo boleto acima.</div>'}
+      </div>
+      ${pagas.length ? `<div class="cartao"><h2>Pagas recentemente</h2><div class="lista-contas">${pagas.map(cartaoConta).join('')}</div></div>` : ''}`;
+
+    const irConfig = document.getElementById('ir-config');
+    if (irConfig) irConfig.onclick = () => { aba = 'config'; render(); };
+
+    const lerForm = () => {
+      conteudo.querySelectorAll('.boleto-form').forEach((f) => {
+        const x = b.boletos[Number(f.dataset.i)];
+        f.querySelectorAll('[data-campo]').forEach((inp) => { x[inp.dataset.campo] = inp.value; });
+      });
+    };
+    const receber = async (e) => {
+      lerForm();
+      for (const a of [...e.target.files]) {
+        try { b.fotos.push(await prepararArquivo(a)); } catch (err) { toast(err.message, true); }
+      }
+      render();
+    };
+    document.getElementById('b-camera').onchange = receber;
+    document.getElementById('b-fotos').onchange = receber;
+    conteudo.querySelectorAll('[data-remover-boleto-arq]').forEach((x) => {
+      x.onclick = () => { lerForm(); b.fotos.splice(Number(x.dataset.removerBoletoArq), 1); render(); };
+    });
+    conteudo.querySelectorAll('[data-remover-boleto]').forEach((x) => {
+      x.onclick = () => { lerForm(); b.boletos.splice(Number(x.dataset.removerBoleto), 1); render(); };
+    });
+    document.getElementById('b-manual').onclick = () => {
+      lerForm();
+      b.boletos.push({ beneficiario: '', descricao: '', valor: '', vencimento: '', linha: '', confianca: '' });
+      render();
+    };
+    const limpar = document.getElementById('b-limpar');
+    if (limpar) limpar.onclick = () => { if (confirm('Descartar este boleto?')) { boletoRascunho = null; render(); } };
+
+    document.getElementById('b-ler').onclick = async (e) => {
+      if (!dados.temChave) { toast('Cadastre a chave da API em Configurações.', true); return; }
+      lerForm();
+      if (b.boletos.length && !confirm('Ler de novo substitui os dados preenchidos. Continuar?')) return;
+      const bt = e.currentTarget;
+      bt.disabled = true;
+      bt.innerHTML = '<span class="carregando"></span> Lendo o boleto…';
+      try {
+        const r = await chamar('lerBoleto', b.fotos);
+        b.aviso = r.aviso || '';
+        b.boletos = (r.boletos || []).map((x) => ({
+          beneficiario: x.beneficiario || '', descricao: x.descricao || '',
+          valor: x.valor ? x.valor.toFixed(2).replace('.', ',') : '',
+          vencimento: /^\d{4}-\d{2}-\d{2}$/.test(x.vencimento || '') ? x.vencimento : '',
+          linha: x.linhaDigitavel || '', confianca: x.confianca || '',
+        }));
+        toast(b.boletos.length ? `${b.boletos.length} boleto${b.boletos.length > 1 ? 's' : ''} lido${b.boletos.length > 1 ? 's' : ''}. Confira antes de salvar.` : 'Nenhum boleto encontrado no arquivo.', !b.boletos.length);
+      } catch (err) {
+        toast(err.message || 'Erro ao ler o boleto', true);
+      }
+      render();
+    };
+
+    const salvar = document.getElementById('b-salvar');
+    if (salvar) salvar.onclick = async () => {
+      lerForm();
+      const contas = b.boletos.map((x) => ({ beneficiario: x.beneficiario.trim(), descricao: x.descricao.trim(), valor: numero(x.valor),
+        vencimento: x.vencimento, linha: String(x.linha || '').replace(/\D/g, '') }));
+      const problema = contas.findIndex((c) => !c.valor || c.valor <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(c.vencimento) || !c.beneficiario);
+      if (problema >= 0) { toast(`Boleto ${problema + 1}: informe beneficiário, valor e vencimento.`, true); return; }
+      salvar.disabled = true;
+      salvar.innerHTML = '<span class="carregando"></span> Salvando…';
+      const enviarLote = (fotos) => chamar('salvarContas', { contas, fotos });
+      try {
+        let r;
+        try { r = await enviarLote(b.fotos); }
+        catch (err) {
+          const msg = String(err && err.message || err);
+          if (!(b.fotos.length && /drive|limite|limit|armazenamento|storage/i.test(msg) &&
+            confirm('O Google Drive recusou guardar o arquivo do boleto (' + msg + ').\n\nSalvar a conta sem o arquivo?'))) throw err;
+          r = await enviarLote([]);
+        }
+        boletoRascunho = null;
+        await recarregar();
+        window.scrollTo(0, 0);
+        toast(r && r.avisoFotos ? 'Conta salva, mas sem o arquivo: ' + r.avisoFotos : (contas.length > 1 ? contas.length + ' contas salvas' : 'Conta salva'), !!(r && r.avisoFotos));
+      } catch (err) {
+        toast('Não foi possível salvar: ' + (err && err.message || err), true);
+        salvar.disabled = false;
+        salvar.textContent = 'Salvar';
+      }
+    };
+
+    conteudo.querySelectorAll('[data-copiar]').forEach((x) => {
+      x.onclick = () => copiar(x.dataset.copiar, x.previousElementSibling);
+    });
+    conteudo.querySelectorAll('[data-paga]').forEach((x) => {
+      x.onclick = async () => {
+        x.disabled = true;
+        try {
+          await chamar('marcarContaPaga', x.dataset.conta, x.dataset.paga === '1');
+          await recarregar();
+          toast(x.dataset.paga === '1' ? 'Conta marcada como paga' : 'Pagamento desfeito');
+        } catch (err) { toast(err.message || 'Erro', true); x.disabled = false; }
+      };
+    });
+    conteudo.querySelectorAll('[data-excluir-conta]').forEach((x) => {
+      x.onclick = async () => {
+        if (!confirm('Excluir esta conta?')) return;
+        try { await chamar('excluirConta', x.dataset.excluirConta); await recarregar(); toast('Conta excluída'); }
+        catch (err) { toast(err.message || 'Erro', true); }
+      };
+    });
+  }
+
   // ----- Custos -----
   function telaCustos() {
     const cat = catalogo();
@@ -1038,7 +1283,46 @@
           <input type="password" id="cfg-chave" placeholder="sk-ant-…" autocomplete="off">
           <span class="dica" style="margin:0">${cfg.temChave ? '<span class="tag ok">cadastrada</span> deixe em branco para manter' : '<span class="tag alerta">não cadastrada</span>'}</span></label>
         <button class="btn btn-azul" id="cfg-salvar">Salvar</button>
-      </div>`;
+      </div>
+      ${cfg.telegram ? (() => { const tg = cfg.telegram; return `
+      <div class="cartao" style="max-width:640px" id="cfg-telegram">
+        <h2>Aviso de contas no Telegram</h2>
+        <p class="dica">Todo dia, no horário escolhido, o robô manda no Telegram as contas vencidas, as que vencem hoje e as de amanhã, com a linha digitável para copiar. Se não houver nada, ele não manda mensagem.</p>
+        ${tg.temToken ? '' : `<ol class="telegram-passos">
+          <li>No Telegram, abra o <strong>@BotFather</strong>, envie <strong>/newbot</strong> e escolha um nome (ex.: Contas O Barracão).</li>
+          <li>Ele responde com um <strong>token</strong> (parece <code>123456:ABC-…</code>). Copie e cole abaixo.</li>
+          <li>Toque no link do seu robô que o BotFather mandou e aperte <strong>Iniciar</strong>. Cada pessoa que vai receber o aviso faz isso no próprio Telegram.</li>
+        </ol>`}
+        <label class="campo" style="margin-bottom:10px">Token do robô
+          <input type="password" id="tg-token" placeholder="${tg.temToken ? 'cadastrado · deixe em branco para manter' : '123456:ABC-…'}" autocomplete="off"></label>
+        <p class="dica">${tg.chats.length ? `<span class="tag ok">recebem o aviso</span> ${tg.chats.map(esc).join(', ')}` : '<span class="tag alerta">ninguém conectado</span> mande /start para o robô e toque em Conectar'}</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          <button class="btn btn-azul" id="tg-conectar">${tg.chats.length ? 'Conectar mais pessoas' : 'Conectar'}</button>
+          ${tg.chats.length ? '<button class="btn btn-secundario" id="tg-testar">Enviar teste</button><button class="btn btn-perigo" id="tg-desconectar">Desconectar</button>' : ''}
+        </div>
+        ${tg.chats.length ? `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+          <label class="campo" style="width:160px">Horário do aviso
+            <select id="tg-hora">${[5, 6, 7, 8, 9, 10, 11, 12].map((h) => `<option value="${h}" ${(tg.hora == null ? 8 : tg.hora) === h ? 'selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('')}</select></label>
+          <button class="btn btn-primario" id="tg-ativar">${tg.ativo ? 'Mudar horário' : 'Ligar aviso diário'}</button>
+          ${tg.ativo ? '<button class="btn btn-perigo" id="tg-desligar">Desligar</button>' : ''}
+        </div>
+        <p class="dica" style="margin-top:10px">${tg.ativo ? `<span class="tag ok">ligado</span> todo dia por volta das ${String(tg.hora).padStart(2, '0')}:00` : '<span class="tag alerta">desligado</span>'}</p>` : ''}
+      </div>`; })() : ''}`;
+    const tgAcao = (id, fn, msg) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.onclick = async () => {
+        el.disabled = true;
+        try { await fn(); toast(msg); await recarregar().catch(() => {}); aba = 'config'; render(); }
+        catch (err) { toast(err.message || String(err), true); el.disabled = false; }
+      };
+    };
+    tgAcao('tg-conectar', () => chamar('conectarTelegram', document.getElementById('tg-token').value.trim()), 'Telegram conectado. Confira a mensagem no celular.');
+    tgAcao('tg-testar', () => chamar('testarTelegram'), 'Teste enviado. Confira o Telegram.');
+    tgAcao('tg-desconectar', () => chamar('desconectarTelegram'), 'Telegram desconectado');
+    tgAcao('tg-ativar', () => chamar('ativarAvisoDiario', Number(document.getElementById('tg-hora').value)), 'Aviso diário ligado');
+    tgAcao('tg-desligar', () => chamar('ativarAvisoDiario', -1), 'Aviso diário desligado');
+
     document.getElementById('cfg-salvar').onclick = async (e) => {
       const b = e.currentTarget;
       b.disabled = true;
@@ -1056,7 +1340,7 @@
   }
 
   // Versão mínima do Codigo.gs (a parte colada no Google) que esta tela usa.
-  const VERSAO_SERVIDOR_MINIMA = 3;
+  const VERSAO_SERVIDOR_MINIMA = 4;
   function avisoAtualizacao() {
     const antigo = document.getElementById('aviso-versao');
     if (antigo) antigo.remove();

@@ -75,6 +75,9 @@ Todo dia, no horário escolhido, o robô manda as contas **vencidas**, as que **
 
 ## Atualizações
 
+> **Para quem mexe no código:** a tela legível é `Painel.fonte.html`. Depois de editar, rode `python3 painel-dre/montar.py`, que gera o `Painel.html` com o código principal em base64. O Google altera trechos do HTML ao montar a página e quebrava o código da tela; em base64 ele passa intacto. Nunca edite o `Painel.html` à mão.
+
+
 A **tela** do painel (`Painel.html`) é carregada do GitHub toda vez que você abre o link. Por isso, as melhorias de tela, gráficos, compras e leitura de notas chegam sozinhas, sem colar nada. O arquivo `Painel` colado no Google fica só como reserva, para quando o GitHub não responder.
 
 Só o **`Codigo.gs`** precisa ser colado de novo, e raramente. Quando for necessário, o painel mostra um aviso vermelho no topo. Nesse caso, cole o arquivo novo e use **Implantar → Gerenciar implantações → Editar → Nova versão**. O link continua o mesmo.

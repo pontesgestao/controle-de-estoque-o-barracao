@@ -1290,13 +1290,21 @@ setTimeout(function () {
     let cfg = { temPlanilha: false, temChave: false, planilha: '' };
     try { cfg = await chamar('obterConfig'); } catch (e) { /* mostra o formulário vazio */ }
     if (cfg.podeConfigurar === false) {
-      conteudo.innerHTML = `<div class="cartao" style="max-width:640px">
-        <h2>Configurações</h2>
-        <p class="dica" style="margin:0">${cfg.temPlanilha ? `<span class="tag ok">planilha conectada</span> ${esc(cfg.planilha)}` : '<span class="tag erro">sem acesso à planilha</span>'}</p>
-        <p class="dica" style="margin:12px 0 0">Você entrou com a conta <strong>${esc(cfg.conta || 'Google')}</strong>. As configurações só podem ser mudadas pelo responsável pelo painel.
-          ${cfg.temPlanilha ? '' : 'Para usar o painel, peça a ele para compartilhar a planilha "Estoque O Barracão" com esta conta, como Editor.'}</p>
-      </div>`;
-      return;
+      aplicarPapel(cfg);
+      // Sem os dados do painel, mostra o erro e o botão de recarregar, e não
+      // a tela de configurações (que esta pessoa não pode mudar).
+      if (!dados) {
+        conteudo.innerHTML = `<div class="cartao" style="max-width:640px">
+          <h2>Não foi possível abrir o painel</h2>
+          <p class="dica">${erroAoCarregar ? esc(erroAoCarregar) : 'A planilha não respondeu.'}</p>
+          <p class="dica">Você entrou com a conta <strong>${esc(cfg.conta || 'Google')}</strong>.${cfg.temPlanilha ? '' : ' Peça ao responsável para compartilhar a planilha "Estoque O Barracão" com esta conta, como Editor.'}</p>
+          <button class="btn btn-azul" id="recarregar-pagina">Recarregar</button>
+        </div>`;
+        document.getElementById('recarregar-pagina').onclick = () => location.reload();
+        return;
+      }
+      aba = 'compras';
+      return render();
     }
     conteudo.innerHTML = `
       <div class="cartao" style="max-width:640px">
@@ -1391,7 +1399,7 @@ setTimeout(function () {
   function avisoAtualizacao() {
     const antigo = document.getElementById('aviso-versao');
     if (antigo) antigo.remove();
-    if ((dados.versaoServidor || 0) >= VERSAO_SERVIDOR_MINIMA) return;
+    if (restrito || (dados.versaoServidor || 0) >= VERSAO_SERVIDOR_MINIMA) return;
     const div = document.createElement('div');
     div.id = 'aviso-versao';
     div.className = 'alerta erro';
@@ -1402,11 +1410,24 @@ setTimeout(function () {
     document.querySelector('main').before(div);
   }
 
-  async function recarregar() {
-    dados = await chamar('carregarDados');
+  // Quem não é o responsável pelo painel (dono ou editor do projeto no
+  // Google) não vê a aba Configurações e o painel abre direto em Compras.
+  let restrito = false;
+  let erroAoCarregar = '';
+  function aplicarPapel(cfg) {
+    restrito = !!(cfg && cfg.podeConfigurar === false);
+    const botao = document.querySelector('nav.abas button[data-aba="config"]');
+    if (botao) botao.hidden = restrito;
+  }
+
+  function aplicarDados(d) {
+    dados = d;
     avisoAtualizacao();
     document.getElementById('sub-topo').textContent = `${dados.contagens.length} contagens · ${new Set(dados.compras.map((c) => c.id)).size} compras`;
     render();
+  }
+  async function recarregar() {
+    aplicarDados(await chamar('carregarDados'));
   }
 
   // Se a planilha não responder, explica as causas mais comuns em vez de
@@ -1434,9 +1455,17 @@ setTimeout(function () {
     document.getElementById('recarregar-pagina').onclick = () => location.reload();
   }, 25000);
 
-  recarregar().then(() => clearTimeout(demora), (err) => {
+  // Busca as configurações (para saber quem está usando) e os dados ao mesmo
+  // tempo; o painel só desenha a primeira tela quando os dois chegam.
+  const papel = chamar('obterConfig').then(aplicarPapel, () => aplicarPapel(null));
+  Promise.all([papel, chamar('carregarDados')]).then(([, d]) => {
+    clearTimeout(demora);
+    if (restrito) aba = 'compras';
+    aplicarDados(d);
+  }, (err) => {
     clearTimeout(demora);
     const msg = String(err && err.message || err);
+    erroAoCarregar = msg.replace(/^.*SEM_ACESSO:\s*/, '').replace(/^Exception:\s*/, '');
     if (msg.includes('SEM_ACESSO')) toast(msg.replace(/^.*SEM_ACESSO:\s*/, ''), true);
     else if (!msg.includes('CONFIGURAR')) toast('Erro ao carregar: ' + msg, true);
     aba = 'config';

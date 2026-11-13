@@ -382,24 +382,36 @@ setTimeout(function () {
     const linhas = [];
     const semCusto = [];
     const negativos = [];
+    // Produto que está em só uma das contagens (ex.: incluído na lista depois
+    // da primeira) não tem estoque inicial ou final conhecido: fica fora do
+    // período, com as compras dele, como uma categoria não contada.
+    const foraProd = [];
+    let comprasForaProd = 0;
+    // Compras de produtos que não estão em nenhuma das contagens entram no CMV
+    // (foram consumidas), mas aparecem num alerta para conferir.
+    const semContagem = [];
     chaves.forEach((k) => {
       const a = mA[k], b = mB[k];
       const ref = a || b;
       const cat = ref ? ref.cat : k.split(' | ')[0];
       const prod = ref ? ref.prod : k.split(' | ')[1];
       if (foraCat.has(cat)) return;
+      const cp = comprasPorProduto[k] || { un: 0, valor: 0 };
+      if (!!a !== !!b) { foraProd.push(prod); comprasForaProd += cp.valor; return; }
+      if (!a && !b && cp.valor) semContagem.push({ prod, cat, valor: cp.valor });
       const eiU = a && a.sit === 'Contada' ? (a.total || 0) : 0;
       const efU = b && b.sit === 'Contada' ? (b.total || 0) : 0;
-      const cp = comprasPorProduto[k] || { un: 0, valor: 0 };
       if (!eiU && !efU && !cp.un && !cp.valor) return;
       const cA = custoEm(k, diaA), cB = custoEm(k, diaB);
       if ((eiU && cA == null) || (efU && cB == null)) semCusto.push(prod + ' (' + cat + ')');
       const ei = eiU * (cA || 0), ef = efU * (cB || 0);
       const consumoU = eiU + cp.un - efU;
-      if (consumoU < 0) negativos.push({ prod, cat, eiU, compraU: cp.un, efU });
+      if (consumoU < 0) negativos.push({ prod, cat, eiU, compraU: cp.un, efU, cmv: ei + cp.valor - ef });
       linhas.push({ chave: k, cat, prod, eiU, compraU: cp.un, efU, consumoU, custo: cB != null ? cB : cA, ei, compras: cp.valor, ef, cmv: ei + cp.valor - ef });
     });
 
+    negativos.sort((x, y) => x.cmv - y.cmv);
+    semContagem.sort((x, y) => y.valor - x.valor);
     const soma = (campo) => linhas.reduce((s, l) => s + l[campo], 0);
     const porCategoria = {};
     linhas.forEach((l) => { porCategoria[l.cat] = (porCategoria[l.cat] || 0) + l.cmv; });
@@ -411,6 +423,7 @@ setTimeout(function () {
       faturamento, cmvPct: faturamento ? cmv / faturamento : null,
       lucroBruto: faturamento != null ? faturamento - cmv : null,
       foraCat: [...foraCat], semCusto, negativos, outrasCompras, comprasForaCalculo,
+      foraProd, comprasForaProd, semContagem,
     };
   }
 
@@ -468,7 +481,7 @@ setTimeout(function () {
               <td class="r num">${dinheiro(x.ei)}</td><td class="r num">${dinheiro(x.compras)}</td><td class="r num">${dinheiro(x.ef)}</td>
               <td class="r num"><strong>${dinheiro(x.cmv)}</strong></td>
               <td class="r num"><strong>${pct(x.cmvPct)}</strong></td>
-              <td>${x.foraCat.length || x.semCusto.length || x.negativos.length ? '<span class="tag alerta">ver alertas</span>' : ''}</td>
+              <td>${x.foraCat.length || x.foraProd.length || x.semContagem.length || x.semCusto.length || x.negativos.length ? '<span class="tag alerta">ver alertas</span>' : ''}</td>
             </tr>`).join('')}</tbody>
         </table></div>` : `<div class="vazio">Esta loja tem ${contagensDaLoja(lojaSel).length} contagem(ns). São necessárias pelo menos duas para formar um período.</div>`}
       </div>
@@ -505,7 +518,9 @@ setTimeout(function () {
     if (p.faturamento == null) alertas.push(['', 'Faturamento não informado', 'Digite o faturamento do período na tabela acima para calcular o CMV %.']);
     if (p.foraCat.length) alertas.push(['', 'Categorias fora do cálculo', `${p.foraCat.join(', ')} não foram contadas em uma das contagens. Os produtos e as compras delas (${dinheiro(p.comprasForaCalculo)}) ficaram fora do CMV.`]);
     if (p.semCusto.length) alertas.push(['erro', `${p.semCusto.length} produto(s) sem custo cadastrado`, `Foram valorizados a R$ 0: ${p.semCusto.slice(0, 12).join(', ')}${p.semCusto.length > 12 ? '…' : ''}. Cadastre na aba Custos.`]);
-    if (p.negativos.length) alertas.push(['erro', `${p.negativos.length} produto(s) com consumo negativo`, `O estoque final ficou maior que o inicial + compras em: ${p.negativos.slice(0, 10).map((n) => n.prod).join(', ')}. Provável compra não lançada ou erro de contagem.`]);
+    if (p.foraProd.length) alertas.push(['', `${p.foraProd.length} produto(s) fora do cálculo`, `Não estavam nas duas contagens (ex.: incluídos na lista depois da primeira): ${p.foraProd.slice(0, 12).join(', ')}${p.foraProd.length > 12 ? '…' : ''}. Eles e as compras deles (${dinheiro(p.comprasForaProd)}) entram a partir do próximo período.`]);
+    if (p.semContagem.length) alertas.push(['', 'Compras de produtos que não são contados', `Entraram no CMV como consumidas: ${p.semContagem.slice(0, 8).map((x) => `${x.prod} (${dinheiro(x.valor)})`).join(', ')}${p.semContagem.length > 8 ? '…' : ''}. Se algum não é insumo (ex.: manutenção, peças), exclua a compra e lance de novo como "Fora do estoque".`]);
+    if (p.negativos.length) alertas.push(['erro', `${p.negativos.length} produto(s) com consumo negativo`, `O estoque final ficou maior que o inicial + compras. Os que mais pesam: ${p.negativos.slice(0, 10).map((n) => `${n.prod} (${dinheiro(n.cmv)}; contou ${qtd(n.eiU)} → ${qtd(n.efU)}${n.compraU ? `, comprou ${qtd(n.compraU)}` : ''})`).join('; ')}. Provável compra não lançada, nota com quantidade errada ou contagem em unidade diferente (ex.: kg × balde, unidade × caixa).`]);
     if (p.outrasCompras) alertas.push(['', 'Compras fora do estoque', `${dinheiro(p.outrasCompras)} em itens marcados como "fora do estoque" não entram no CMV.`]);
 
     return `
@@ -849,6 +864,14 @@ setTimeout(function () {
       if (problemas.length) { toast('Antes de salvar: ' + problemas.slice(0, 3).join('; '), true); return; }
       salvar.disabled = true;
       salvar.innerHTML = '<span class="carregando"></span> Salvando…';
+      const docNorm = (d) => String(d == null ? '' : d).replace(/\D/g, '').replace(/^0+/, '');
+      const doc = docNorm(n.documento);
+      const repetida = doc && dados.compras.find((c) => docNorm(c.documento) === doc);
+      if (repetida && !confirm(`A nota nº ${n.documento} já foi lançada em ${diaBR(repetida.dia)} (${repetida.fornecedor || 'sem fornecedor'}).\n\nLançar de novo? Se for a mesma nota, ela vai contar em dobro no CMV.`)) {
+        salvar.disabled = false;
+        salvar.textContent = 'Salvar compra';
+        return;
+      }
       const dadosCompra = { loja: n.loja, dia: n.dia, fornecedor: n.fornecedor, documento: n.documento, fotos: n.fotos, itens };
       const concluir = async (r) => {
         ultimaSalva = `${n.fornecedor || 'nota'}${n.documento ? ' nº ' + n.documento : ''} · ${diaBR(n.dia)} · ${dinheiro(itens.reduce((s, it) => s + (it.valor || 0), 0))}`;

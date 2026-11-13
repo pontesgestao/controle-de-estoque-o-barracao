@@ -247,7 +247,7 @@ window.CUSTOS_SUGERIDOS = [
   {"c": "Materiais de consumo", "p": "Fita adesiva", "u": "rolo", "s": 4.0, "o": "Estimativa"},
   {"c": "Materiais de consumo", "p": "Fósforo", "u": "caixinha", "s": 0.5, "o": "Estimativa"},
   {"c": "Materiais de consumo", "p": "Grampo", "u": "caixa", "s": 5.0, "o": "Estimativa"},
-  {"c": "Materiais de consumo", "p": "Palito de dente", "u": "caixa c/ 2000", "s": 18.88, "o": "Orçamento Mape Atacadista 27/10/2026", "n": "Mello bambu."},
+  {"c": "Materiais de consumo", "p": "Palito de dente", "u": "palito", "s": 0.00944, "o": "Orçamento Mape Atacadista 27/10/2026", "n": "Mello bambu, caixa c/ 2.000 a R$ 18,88."},
   {"c": "Materiais de consumo", "p": "Pilha", "u": "pilha", "s": 3.0, "o": "Estimativa"},
   {"c": "Materiais de limpeza", "p": "Água sanitária / Qboa", "u": "galão 5 L", "s": 10.79, "o": "Orçamento Mape Atacadista 27/10/2026", "n": "Super Forte 5 L."},
   {"c": "Materiais de limpeza", "p": "Álcool", "u": "frasco 1 L", "s": 8.0, "o": "Estimativa"},

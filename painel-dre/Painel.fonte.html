@@ -1257,7 +1257,9 @@ setTimeout(function () {
     conteudo.innerHTML = `
       <div class="cartao">
         <div class="linha-titulo"><h2>Custo por unidade (ou por kg)</h2>
-          <input type="search" id="busca-custo" placeholder="Buscar produto…" style="max-width:260px"></div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            ${semCusto ? `<label class="dica" style="margin:0;display:flex;gap:6px;align-items:center;font-weight:800"><input type="checkbox" id="so-sem-custo" checked> Só os sem custo</label>` : ''}
+            <input type="search" id="busca-custo" placeholder="Buscar produto…" style="max-width:260px"></div></div>
         <p class="dica">O custo é atualizado sozinho a cada compra lançada. Use esta tela para o custo inicial ou para corrigir um valor.
           ${semCusto ? `<span class="tag erro">${semCusto} produto(s) sem custo</span>` : '<span class="tag ok">todos os produtos têm custo</span>'}</p>
         <div class="tabela-wrap"><table>
@@ -1267,17 +1269,22 @@ setTimeout(function () {
       </div>`;
     const corpo = document.getElementById('tabela-custos');
     let filtro = '';
+    // Com produtos sem custo, a tela abre mostrando só eles, para cadastrar rápido.
+    let soSemCusto = semCusto > 0;
     const desenhar = () => {
-      const ls = linhas.filter((l) => !filtro || (l.produto + ' ' + l.categoria).toLowerCase().includes(filtro))
+      const ls = linhas.filter((l) => (!soSemCusto || !l.atual) && (!filtro || (l.produto + ' ' + l.categoria).toLowerCase().includes(filtro)))
         .sort((a, b) => (a.atual ? 1 : 0) - (b.atual ? 1 : 0));
       corpo.innerHTML = ls.map((l) => `<tr data-chave="${esc(l.chave)}">
         <td>${esc(l.produto)} <span class="tag">${esc(l.categoria)}</span></td>
         <td class="r num">${l.atual ? dinheiro(l.atual.custo) : '<span class="tag erro">sem custo</span>'}</td>
         <td>${l.atual ? diaBR(l.atual.desde) : ''}</td><td class="dica" style="margin:0">${l.atual ? esc(l.atual.origem) : ''}</td>
         <td class="r"><input type="text" inputmode="decimal" class="num" style="width:110px;text-align:right" placeholder="R$ 0,00"></td>
-        <td><button class="btn btn-secundario" data-salvar>Salvar</button></td></tr>`).join('');
+        <td><button class="btn btn-secundario" data-salvar>Salvar</button></td></tr>`).join('') ||
+        `<tr><td colspan="6" class="vazio">${soSemCusto ? 'Todos os produtos já têm custo.' : 'Nenhum produto encontrado.'}</td></tr>`;
     };
     document.getElementById('busca-custo').oninput = (e) => { filtro = e.target.value.toLowerCase(); desenhar(); };
+    const caixaSem = document.getElementById('so-sem-custo');
+    if (caixaSem) caixaSem.onchange = () => { soSemCusto = caixaSem.checked; desenhar(); };
     corpo.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-salvar]');
       if (!b) return;

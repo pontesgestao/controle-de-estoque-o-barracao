@@ -107,6 +107,10 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: .75rem; font-weight: 700; color: var(--suave); text-align: center; word-break: break-all; }
   .fotos .pdf strong { font-size: 1rem; color: var(--erro); }
   .fotos .remover { position: absolute; top: -8px; right: -8px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: var(--texto); color: #fff; font-weight: 800; line-height: 1; }
+  .fat-campos { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; min-width: 150px; }
+  .fat-campos label { display: flex; align-items: center; gap: 6px; font-size: .75rem; font-weight: 800; color: var(--suave); }
+  .fat-campos input { width: 110px; min-height: 34px; padding: 4px 8px; text-align: right; }
+  .fat-total { font-size: .8rem; color: var(--suave); }
   .itens-nota td { padding: 6px 4px; }
   .itens-nota input, .itens-nota select { min-height: 36px; padding: 4px 8px; }
   .itens-nota tr.revisar td { background: #FFFBEA; }
@@ -343,6 +347,14 @@ setTimeout(function () {
     const f = dados.faturamento.find((x) => x.inicial === A.id && x.final === B.id);
     return f ? f.valor : null;
   }
+  // Salão e iFood do período. Faturamento lançado antes da divisão (só o
+  // total) aparece no campo do salão.
+  function partesFaturamento(A, B) {
+    const f = dados.faturamento.find((x) => x.inicial === A.id && x.final === B.id);
+    if (!f) return { salao: null, ifood: null };
+    if (f.salao == null && f.ifood == null) return { salao: f.valor, ifood: null };
+    return { salao: f.salao, ifood: f.ifood };
+  }
 
   // Primeiro dia de compras que pertence ao período que começa nesta
   // contagem. Contagem feita à tarde ou à noite já inclui as compras do dia,
@@ -417,8 +429,9 @@ setTimeout(function () {
     linhas.forEach((l) => { porCategoria[l.cat] = (porCategoria[l.cat] || 0) + l.cmv; });
     const faturamento = faturamentoDe(A, B);
     const cmv = soma('cmv');
+    const partes = partesFaturamento(A, B);
     return {
-      A, B, diaA, diaB, loja: A.loja, linhas, porCategoria,
+      A, B, diaA, diaB, loja: A.loja, linhas, porCategoria, fatSalao: partes.salao, fatIfood: partes.ifood,
       ei: soma('ei'), compras: soma('compras'), ef: soma('ef'), cmv,
       faturamento, cmvPct: faturamento ? cmv / faturamento : null,
       lucroBruto: faturamento != null ? faturamento - cmv : null,
@@ -467,7 +480,7 @@ setTimeout(function () {
 
       <div class="cartao">
         <div class="linha-titulo"><h2>Períodos · ${esc(lojaSel)}</h2>
-          <span class="dica" style="margin:0">Digite o faturamento de cada período para calcular o CMV %.</span></div>
+          <span class="dica" style="margin:0">Digite o faturamento do salão e do iFood de cada período; o total entra no CMV %.</span></div>
         ${periodos.length ? `
         <div class="tabela-wrap"><table>
           <thead><tr><th>Período</th><th class="r">Faturamento</th><th class="r">Estoque inicial</th><th class="r">Compras</th>
@@ -475,9 +488,13 @@ setTimeout(function () {
           <tbody>${periodos.slice().reverse().map((x) => `
             <tr class="clicavel ${x.B.id === periodoSel ? 'selecionado' : ''}" data-periodo="${esc(x.B.id)}">
               <td><strong>${diaBR(x.diaA)}</strong> → <strong>${diaBR(x.diaB)}</strong></td>
-              <td class="r"><input class="fat num" type="text" inputmode="decimal" placeholder="R$ 0,00"
-                   value="${x.faturamento != null ? qtd(x.faturamento) : ''}" data-ini="${esc(x.A.id)}" data-fim="${esc(x.B.id)}"
-                   data-dia-ini="${x.diaA}" data-dia-fim="${x.diaB}" aria-label="Faturamento do período"></td>
+              <td class="r"><div class="fat-campos" data-ini="${esc(x.A.id)}" data-fim="${esc(x.B.id)}" data-dia-ini="${x.diaA}" data-dia-fim="${x.diaB}">
+                <label>Salão<input class="fat num" data-parte="salao" type="text" inputmode="decimal" placeholder="R$ 0,00"
+                   value="${x.fatSalao != null ? qtd(x.fatSalao) : ''}" aria-label="Faturamento do salão"></label>
+                <label>iFood<input class="fat num" data-parte="ifood" type="text" inputmode="decimal" placeholder="R$ 0,00"
+                   value="${x.fatIfood != null ? qtd(x.fatIfood) : ''}" aria-label="Faturamento do iFood"></label>
+                <span class="fat-total num">Total: <strong>${dinheiro(x.faturamento)}</strong></span>
+              </div></td>
               <td class="r num">${dinheiro(x.ei)}</td><td class="r num">${dinheiro(x.compras)}</td><td class="r num">${dinheiro(x.ef)}</td>
               <td class="r num"><strong>${dinheiro(x.cmv)}</strong></td>
               <td class="r num"><strong>${pct(x.cmvPct)}</strong></td>
@@ -494,12 +511,17 @@ setTimeout(function () {
     });
     conteudo.querySelectorAll('input.fat').forEach((inp) => {
       inp.onchange = async () => {
-        const valor = numero(inp.value);
-        const f = { loja: lojaSel, inicial: inp.dataset.ini, final: inp.dataset.fim, inicio: inp.dataset.diaIni, fim: inp.dataset.diaFim, valor: valor == null ? '' : valor };
+        const box = inp.closest('.fat-campos');
+        const salao = numero(box.querySelector('[data-parte="salao"]').value);
+        const ifood = numero(box.querySelector('[data-parte="ifood"]').value);
+        const valor = salao == null && ifood == null ? null : (salao || 0) + (ifood || 0);
+        const f = { loja: lojaSel, inicial: box.dataset.ini, final: box.dataset.fim, inicio: box.dataset.diaIni, fim: box.dataset.diaFim,
+          valor: valor == null ? '' : valor, salao: salao == null ? '' : salao, ifood: ifood == null ? '' : ifood };
         try {
           await chamar('salvarFaturamento', f);
           const atual = dados.faturamento.find((x) => x.inicial === f.inicial && x.final === f.final);
-          if (atual) atual.valor = valor; else dados.faturamento.push({ loja: f.loja, inicial: f.inicial, final: f.final, valor });
+          if (atual) Object.assign(atual, { valor, salao, ifood });
+          else dados.faturamento.push({ loja: f.loja, inicial: f.inicial, final: f.final, valor, salao, ifood });
           toast('Faturamento salvo');
           render();
         } catch (err) { toast('Não foi possível salvar: ' + err.message, true); }
@@ -515,7 +537,7 @@ setTimeout(function () {
   function detalhePeriodo(p) {
     const cats = Object.entries(p.porCategoria).sort((a, b) => b[1] - a[1]);
     const alertas = [];
-    if (p.faturamento == null) alertas.push(['', 'Faturamento não informado', 'Digite o faturamento do período na tabela acima para calcular o CMV %.']);
+    if (p.faturamento == null) alertas.push(['', 'Faturamento não informado', 'Digite o faturamento do salão e do iFood do período na tabela acima para calcular o CMV %.']);
     if (p.foraCat.length) alertas.push(['', 'Categorias fora do cálculo', `${p.foraCat.join(', ')} não foram contadas em uma das contagens. Os produtos e as compras delas (${dinheiro(p.comprasForaCalculo)}) ficaram fora do CMV.`]);
     if (p.semCusto.length) alertas.push(['erro', `${p.semCusto.length} produto(s) sem custo cadastrado`, `Foram valorizados a R$ 0: ${p.semCusto.slice(0, 12).join(', ')}${p.semCusto.length > 12 ? '…' : ''}. Cadastre na aba Custos.`]);
     if (p.foraProd.length) alertas.push(['', `${p.foraProd.length} produto(s) fora do cálculo`, `Não estavam nas duas contagens (ex.: incluídos na lista depois da primeira): ${p.foraProd.slice(0, 12).join(', ')}${p.foraProd.length > 12 ? '…' : ''}. Eles e as compras deles (${dinheiro(p.comprasForaProd)}) entram a partir do próximo período.`]);
@@ -527,7 +549,8 @@ setTimeout(function () {
       <div class="linha-titulo"><h2>Período ${diaBR(p.diaA)} → ${diaBR(p.diaB)} · ${esc(p.loja)}</h2>
         <span class="dica" style="margin:0">Contado por ${p.A.responsavel === p.B.responsavel ? esc(p.A.responsavel) : esc(p.A.responsavel) + ' e ' + esc(p.B.responsavel)}</span></div>
       <div class="kpis">
-        <div class="kpi"><div class="rotulo">Faturamento</div><div class="valor num">${dinheiro(p.faturamento)}</div></div>
+        <div class="kpi"><div class="rotulo">Faturamento</div><div class="valor num">${dinheiro(p.faturamento)}</div>
+          ${p.faturamento != null ? `<div class="detalhe num">Salão ${dinheiro(p.fatSalao || 0)} · iFood ${dinheiro(p.fatIfood || 0)}</div>` : ''}</div>
         <div class="kpi"><div class="rotulo">CMV</div><div class="valor num">${dinheiro(p.cmv)}</div></div>
         <div class="kpi destaque"><div class="rotulo">CMV %</div><div class="valor num">${pct(p.cmvPct)}</div><div class="detalhe">CMV ÷ faturamento</div></div>
         <div class="kpi"><div class="rotulo">Lucro bruto</div><div class="valor num">${dinheiro(p.lucroBruto)}</div><div class="detalhe">Faturamento − CMV</div></div>
@@ -1418,7 +1441,7 @@ setTimeout(function () {
   }
 
   // Versão mínima do Codigo.gs (a parte colada no Google) que esta tela usa.
-  const VERSAO_SERVIDOR_MINIMA = 4;
+  const VERSAO_SERVIDOR_MINIMA = 5;
   function avisoAtualizacao() {
     const antigo = document.getElementById('aviso-versao');
     if (antigo) antigo.remove();

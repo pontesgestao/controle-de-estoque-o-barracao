@@ -18,7 +18,8 @@ const CAB_COMPRAS = ['ID compra', 'Data da compra', 'Loja', 'Fornecedor', 'Nº d
   'Categoria', 'Produto', 'Situação', 'Embalagens', 'Unid. por embalagem', 'Total (unidades)',
   'Valor total (R$)', 'Custo por unidade (R$)', 'Fotos', 'Lançado em'];
 const CAB_CUSTOS = ['Categoria', 'Produto', 'Custo por unidade (R$)', 'Vigente desde', 'Origem', 'ID compra', 'Registrado em'];
-const CAB_FATURAMENTO = ['Loja', 'Contagem inicial (ID)', 'Contagem final (ID)', 'Início', 'Fim', 'Faturamento (R$)', 'Atualizado em'];
+const CAB_FATURAMENTO = ['Loja', 'Contagem inicial (ID)', 'Contagem final (ID)', 'Início', 'Fim', 'Faturamento (R$)', 'Atualizado em',
+  'Salão (R$)', 'iFood (R$)'];
 const CAB_IGNORADAS = ['ID contagem', 'Loja', 'Data', 'Ignorada em'];
 const CAB_PRODUTOS = ['Categoria', 'Produto', 'Criado em'];
 const ABA_CONTAS = 'Contas a pagar';
@@ -30,7 +31,7 @@ const PASTA_FOTOS = 'O Barracão - Notas fiscais';
 
 // Versão desta parte do código (a que fica colada no Google). A tela avisa
 // quando precisa de uma versão mais nova.
-const VERSAO_SERVIDOR = 4;
+const VERSAO_SERVIDOR = 5;
 
 // A tela do painel vem do GitHub a cada abertura, assim as melhorias chegam
 // sem precisar colar nada. Sem conexão com o GitHub, usa a cópia local "Painel".
@@ -136,7 +137,7 @@ function carregarDados() {
   });
 
   const faturamento = linhas_(ss, ABA_FATURAMENTO, CAB_FATURAMENTO).map(function (r) {
-    return { loja: String(r[0]), inicial: String(r[1]), final: String(r[2]), valor: num_(r[5]) };
+    return { loja: String(r[0]), inicial: String(r[1]), final: String(r[2]), valor: num_(r[5]), salao: num_(r[7]), ifood: num_(r[8]) };
   });
 
   const contas = linhas_(ss, ABA_CONTAS, CAB_CONTAS).map(function (r) {
@@ -192,12 +193,22 @@ function lerContagens_(valores, fmt) {
 
 // ---------- Gravações ----------
 
+// Faturamento do período: salão + iFood. A coluna "Faturamento (R$)" guarda o
+// total (é ela que entra no CMV %); as duas últimas, cada parte.
 function salvarFaturamento(f) {
   const ss = planilha_();
   const aba = aba_(ss, ABA_FATURAMENTO, CAB_FATURAMENTO);
+  // Aba criada antes das colunas Salão/iFood: completa o cabeçalho.
+  if (aba.getLastColumn() < CAB_FATURAMENTO.length) {
+    aba.getRange(1, 1, 1, CAB_FATURAMENTO.length).setValues([CAB_FATURAMENTO])
+      .setFontWeight('bold').setBackground('#1C1C1C').setFontColor('#FFFFFF').setWrap(true);
+  }
   const valores = aba.getDataRange().getValues();
+  const parte = function (v) { return v === '' || v == null || !isFinite(Number(v)) ? '' : Number(v); };
+  const salao = parte(f.salao), ifood = parte(f.ifood);
+  const total = salao === '' && ifood === '' ? parte(f.valor) : (Number(salao) || 0) + (Number(ifood) || 0);
   const linha = [texto_(f.loja), texto_(f.inicial), texto_(f.final), texto_(f.inicio), texto_(f.fim),
-    f.valor === '' || f.valor == null ? '' : Number(f.valor), new Date()];
+    total, new Date(), salao, ifood];
   for (let i = 1; i < valores.length; i++) {
     if (String(valores[i][1]) === f.inicial && String(valores[i][2]) === f.final) {
       aba.getRange(i + 1, 1, 1, linha.length).setValues([linha]);

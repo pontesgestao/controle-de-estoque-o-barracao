@@ -140,9 +140,37 @@
   }
 
   function categoriaCompleta(ci) { return pulada(ci) || categorias[ci].itens.every((it) => itemCompleto(it.id)); }
+  // Dá para abrir qualquer categoria, fora da ordem; só a revisão (índice
+  // categorias.length) exige todas as categorias completas.
   function liberada(ci) {
-    for (let i = 0; i < ci; i++) if (!categoriaCompleta(i)) return false;
-    return true;
+    if (ci < categorias.length) return true;
+    return categorias.every((c, i) => categoriaCompleta(i));
+  }
+  function primeiraIncompleta() { return categorias.findIndex((c, i) => !categoriaCompleta(i)); }
+
+  // ---------- Busca de produtos (qualquer categoria) ----------
+  const APELIDOS = { dogueira: 'cachorro-quente', 'hot dog': 'cachorro-quente', marmitex: 'marmita' };
+  function normalizar(t) {
+    return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+  function buscarItens(texto) {
+    let q = normalizar(texto).trim();
+    Object.keys(APELIDOS).forEach((a) => { if (q.includes(a)) q = q.replace(a, APELIDOS[a]); });
+    const palavras = q.split(/\s+/).filter((w) => w.length >= 2 && !/^\d+(kg|g|ml|l|un)?$/.test(w));
+    if (!palavras.length) return [];
+    const achados = [];
+    categorias.forEach((c, ci) => c.itens.forEach((it) => {
+      const alvo = normalizar(it.nome + ' ' + c.nome);
+      if (palavras.every((w) => alvo.includes(w))) achados.push({ it, ci });
+    }));
+    return achados;
+  }
+  function acharItem(id) {
+    for (let ci = 0; ci < categorias.length; ci++) {
+      const it = categorias[ci].itens.find((x) => x.id === id);
+      if (it) return { it, ci };
+    }
+    return null;
   }
   // Categoria marcada como não contada conta como concluída no progresso.
   function contarPreenchidos() {
@@ -275,13 +303,24 @@
     app.querySelectorAll('.etapa').forEach((b) => {
       b.onclick = () => {
         const alvo = b.dataset.passo;
-        if (alvo === 'revisao') { if (liberada(categorias.length)) telaRevisao(); return; }
-        const ci = Number(alvo);
-        if (liberada(ci)) telaContagem(ci);
+        if (alvo === 'revisao') {
+          if (liberada(categorias.length)) telaRevisao();
+          else irParaFaltante();
+          return;
+        }
+        telaContagem(Number(alvo));
       };
     });
     const atual = app.querySelector('.etapa.atual');
     if (atual) atual.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+
+  function irParaFaltante() {
+    const ci = primeiraIncompleta();
+    if (ci < 0) return telaRevisao();
+    const falta = categorias[ci].itens.filter((it) => !itemCompleto(it.id)).length;
+    alert(`Ainda faltam itens antes de revisar.\n\nIndo para "${categorias[ci].nome}" (${falta} ${falta > 1 ? 'itens' : 'item'} sem preencher).`);
+    telaContagem(ci);
   }
 
   function atualizarProgresso() {
@@ -304,7 +343,7 @@
       </div>`;
   }
 
-  function htmlItem(it) {
+  function htmlItem(it, nomeCategoria) {
     const v = valor(it.id);
     const modo = v.modo || 'nenhum';
     const kg = porPeso(it);
@@ -312,6 +351,7 @@
       `<button type="button" role="radio" data-modo="${m}" aria-checked="${v.modo === m}">${texto}</button>`;
     return `
       <li class="item modo-${modo} ${itemCompleto(it.id) ? 'preenchido' : ''}" data-id="${esc(it.id)}">
+        ${nomeCategoria ? `<div class="item-categoria">${esc(nomeCategoria)}</div>` : ''}
         <div class="item-nome"><span class="ok" aria-hidden="true">✓</span>${esc(it.nome)}${it.incluido ? `
           <button type="button" class="link-remover" data-remover="sim">Remover</button>` : ''}</div>
         <div class="pergunta-linha">
@@ -364,6 +404,14 @@
     app.innerHTML = `
       ${htmlTopo(ci)}
       <section class="conteudo">
+        <div class="busca-produto">
+          <input type="search" id="busca" placeholder="🔍 Buscar produto em todas as categorias" autocomplete="off" enterkeyhint="search" aria-label="Buscar produto">
+        </div>
+        <div id="resultados" hidden>
+          <p class="dica" id="resumo-busca"></p>
+          <ul class="itens" id="lista-busca"></ul>
+        </div>
+        <div id="area-categoria">
         <div class="cabecalho-categoria">
           <h2>${esc(cat.nome)}</h2>
           <span class="contador" id="contador-cat"></span>
@@ -399,6 +447,7 @@
               <button type="submit" class="btn btn-primario">Incluir</button>
             </div>
           </form>`}
+        </div>
       </section>
       <footer class="rodape">
         <div class="rodape-interno">
@@ -411,17 +460,16 @@
     ligarEtapas();
 
     const btnAvancar = document.getElementById('avancar');
-    const irParaProxima = () => (ultima ? telaRevisao() : telaContagem(ci + 1));
+    const irParaProxima = () => (ultima ? (liberada(categorias.length) ? telaRevisao() : irParaFaltante()) : telaContagem(ci + 1));
     document.getElementById('voltar').onclick = () => (ci === 0 ? telaInicio() : telaContagem(ci - 1));
-    btnAvancar.onclick = () => { if (categoriaCompleta(ci)) irParaProxima(); };
+    btnAvancar.onclick = irParaProxima;
 
     function atualizarCategoria() {
       const feitos = cat.itens.filter((it) => itemCompleto(it.id)).length;
       const falta = naoContada ? 0 : cat.itens.length - feitos;
       document.getElementById('contador-cat').textContent = naoContada ? 'Não contada' : `${feitos}/${cat.itens.length}`;
-      btnAvancar.disabled = falta > 0;
       document.getElementById('falta').textContent = falta > 0
-        ? `Falta${falta > 1 ? 'm' : ''} ${falta} ${falta > 1 ? 'itens' : 'item'} para liberar a próxima etapa`
+        ? `Falta${falta > 1 ? 'm' : ''} ${falta} ${falta > 1 ? 'itens' : 'item'} nesta categoria (pode voltar depois)`
         : (naoContada ? 'Categoria não contada hoje' : 'Categoria completa!');
       atualizarProgresso();
       // Atualiza as bolinhas das etapas sem redesenhar a tela.
@@ -430,7 +478,6 @@
         const idx = alvo === 'revisao' ? categorias.length : Number(alvo);
         const ok = liberada(idx);
         b.classList.toggle('bloqueada', !ok && idx !== ci);
-        if (ok) b.removeAttribute('aria-disabled'); else b.setAttribute('aria-disabled', 'true');
         if (alvo !== 'revisao' && idx !== ci) {
           b.classList.toggle('feita', categoriaCompleta(idx) && !pulada(idx));
           b.classList.toggle('pulada', pulada(idx));
@@ -438,6 +485,8 @@
         }
       });
     }
+
+    ligarBusca(ci, atualizarCategoria);
 
     if (naoContada) {
       document.getElementById('desfazer-pular').onclick = () => {
@@ -458,8 +507,7 @@
       irParaProxima();
     };
 
-    const lista = app.querySelector('.itens');
-    const memoria = carregar(CHAVE_EMBALAGENS) || {};
+    const lista = app.querySelector('#area-categoria .itens');
 
     // Incluir um produto que não está na lista. Ele fica guardado neste
     // aparelho para as próximas contagens e vai junto no envio, para a
@@ -497,27 +545,36 @@
       if (li) { li.scrollIntoView({ block: 'center' }); li.classList.add('destaque'); }
     };
 
-    function atualizarItem(li) {
-      const id = li.dataset.id;
-      const it = cat.itens.find((x) => x.id === id);
-      const v = valor(id);
-      li.className = `item modo-${v.modo || 'nenhum'} ${itemCompleto(id) ? 'preenchido' : ''}`;
-      li.querySelectorAll('[data-modo]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.modo === v.modo)));
-      const conta = li.querySelector('[data-conta]');
-      if (v.modo === 'cx') {
-        if (!(lerNumero(v.por) > 0)) conta.innerHTML = `Informe quant${porPeso(it) ? 'os kg' : 'as unidades'} vêm em cada ${esc(embalagem(it))}.`;
-        else if (lerNumero(v.cx) === null) conta.innerHTML = `Informe quantas embalagens fechadas você contou.`;
-        else conta.innerHTML = `Total: <strong>${formatar(totalUnidades(v))} ${porPeso(it) ? 'kg' : 'unidades'}</strong><br><small>${esc(descrever(it, v))}</small>`;
-        conta.classList.toggle('pronta', itemCompleto(id));
-      }
-    }
+    ligarItens(lista, ci, atualizarCategoria);
+    lista.querySelectorAll('.item').forEach((li) => atualizarItem(li));
+    atualizarCategoria();
+    window.scrollTo(0, 0);
+  }
 
+  function atualizarItem(li) {
+    const id = li.dataset.id;
+    const it = acharItem(id).it;
+    const v = valor(id);
+    li.className = `item modo-${v.modo || 'nenhum'} ${itemCompleto(id) ? 'preenchido' : ''}`;
+    li.querySelectorAll('[data-modo]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.modo === v.modo)));
+    const conta = li.querySelector('[data-conta]');
+    if (v.modo === 'cx') {
+      if (!(lerNumero(v.por) > 0)) conta.innerHTML = `Informe quant${porPeso(it) ? 'os kg' : 'as unidades'} vêm em cada ${esc(embalagem(it))}.`;
+      else if (lerNumero(v.cx) === null) conta.innerHTML = `Informe quantas embalagens fechadas você contou.`;
+      else conta.innerHTML = `Total: <strong>${formatar(totalUnidades(v))} ${porPeso(it) ? 'kg' : 'unidades'}</strong><br><small>${esc(descrever(it, v))}</small>`;
+      conta.classList.toggle('pronta', itemCompleto(id));
+    }
+  }
+
+  // Liga os eventos de uma lista de itens (da categoria ou da busca).
+  function ligarItens(lista, ci, depois) {
+    const memoria = carregar(CHAVE_EMBALAGENS) || {};
     function gravar(li, mudancas) {
       const id = li.dataset.id;
       estado.valores[id] = { ...valor(id), ...mudancas };
       salvar();
       atualizarItem(li);
-      atualizarCategoria();
+      depois();
     }
 
     lista.addEventListener('input', (e) => {
@@ -540,9 +597,10 @@
 
       if (e.target.closest('[data-remover]')) {
         const id = li.dataset.id;
-        const it = cat.itens.find((x) => x.id === id);
+        const achado = acharItem(id);
+        const it = achado.it, nomeCat = categorias[achado.ci].nome;
         if (!confirm(`Remover "${it.nome}" da lista?`)) return;
-        produtosIncluidos = produtosIncluidos.filter((p) => !(p.categoria === cat.nome && p.produto === it.nome));
+        produtosIncluidos = produtosIncluidos.filter((p) => !(p.categoria === nomeCat && p.produto === it.nome));
         guardar(CHAVE_PRODUTOS_INCLUIDOS, produtosIncluidos);
         delete estado.valores[id];
         salvar();
@@ -601,10 +659,37 @@
     lista.addEventListener('focusin', (e) => {
       if (e.target.matches('input')) setTimeout(() => e.target.select(), 0);
     });
+  }
 
-    lista.querySelectorAll('.item').forEach(atualizarItem);
-    atualizarCategoria();
-    window.scrollTo(0, 0);
+  // Campo de busca: mostra os produtos de qualquer categoria que batem com o
+  // texto, para preencher ali mesmo. Ao limpar, volta para a categoria.
+  function ligarBusca(ci, depoisCategoria) {
+    const campo = document.getElementById('busca');
+    const area = document.getElementById('area-categoria');
+    const caixa = document.getElementById('resultados');
+    const listaBusca = document.getElementById('lista-busca');
+    const resumo = document.getElementById('resumo-busca');
+    let mexeu = false;
+    ligarItens(listaBusca, ci, () => { mexeu = true; atualizarProgresso(); });
+    let espera = null;
+    campo.addEventListener('input', () => {
+      clearTimeout(espera);
+      espera = setTimeout(() => {
+        const texto = campo.value.trim();
+        if (!texto) {
+          caixa.hidden = true; area.hidden = false; listaBusca.innerHTML = '';
+          if (mexeu) telaContagem(ci);   // redesenha a categoria com o que foi preenchido na busca
+          return;
+        }
+        const achados = buscarItens(texto).slice(0, 25);
+        area.hidden = true; caixa.hidden = false;
+        resumo.textContent = achados.length
+          ? `${achados.length} produto${achados.length > 1 ? 's' : ''} encontrado${achados.length > 1 ? 's' : ''}. Preencha aqui mesmo; fica salvo na categoria certa.`
+          : `Nenhum produto com "${texto}". Tente outra palavra, ou abra a categoria certa e use "+ Incluir produto que falta".`;
+        listaBusca.innerHTML = achados.map((a) => htmlItem(a.it, categorias[a.ci].nome)).join('');
+        listaBusca.querySelectorAll('.item').forEach((li) => atualizarItem(li));
+      }, 200);
+    });
   }
 
   // ---------- Revisão e envio ----------

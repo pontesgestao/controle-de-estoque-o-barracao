@@ -259,3 +259,12 @@ button { cursor: pointer; }
 .link-remover { margin-left: auto; border: 0; background: none; color: var(--erro); font-size: .85rem; font-weight: 700; text-decoration: underline; min-height: 32px; padding: 0 4px; flex-shrink: 0; }
 .item.destaque { animation: destaque 1.6s ease-out; }
 @keyframes destaque { from { box-shadow: 0 0 0 4px var(--laranja); } to { box-shadow: var(--sombra); } }
+
+/* Busca de produtos em todas as categorias */
+.busca-produto { margin: 0 0 14px; }
+.busca-produto input {
+  width: 100%; min-height: 48px; padding: 10px 14px; border: 2px solid var(--borda); border-radius: 14px;
+  background: var(--cartao); font-size: 1rem; box-shadow: var(--sombra); outline: none;
+}
+.busca-produto input:focus { border-color: var(--laranja); }
+.item-categoria { font-size: .72rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--laranja-escuro); margin-bottom: -2px; }

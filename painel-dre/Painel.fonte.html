@@ -270,6 +270,24 @@ setTimeout(function () {
     document.body.appendChild(t);
     setTimeout(() => t.remove(), erro ? 6000 : 2800);
   }
+  // Confirmação dentro do painel (a do navegador mostra o endereço do Google
+  // e deixa "bloquear caixas de diálogo", o que trava os botões).
+  function confirmar(msg) {
+    const botao = /^Excluir/.test(msg) ? 'Excluir' : /^Descartar/.test(msg) ? 'Descartar' : 'Continuar';
+    return new Promise((ok) => {
+      const d = document.createElement('dialog');
+      d.className = 'dialogo';
+      d.innerHTML = `<form method="dialog">
+        <p style="white-space:pre-line;margin:0;font-weight:700">${esc(msg)}</p>
+        <div class="botoes-dialogo">
+          <button class="btn ${botao === 'Continuar' ? 'btn-azul' : 'btn-primario'}" value="sim">${botao}</button>
+          <button class="btn btn-secundario" value="nao">Cancelar</button>
+        </div></form>`;
+      document.body.appendChild(d);
+      d.addEventListener('close', () => { ok(d.returnValue === 'sim'); d.remove(); });
+      d.showModal();
+    });
+  }
   const graficos = [];
   function limparGraficos() { while (graficos.length) graficos.pop().destroy(); }
 
@@ -794,12 +812,12 @@ setTimeout(function () {
       render();
     };
     const limpar = document.getElementById('c-limpar');
-    if (limpar) limpar.onclick = () => { if (confirm('Descartar esta nota?')) { notaRascunho = null; render(); } };
+    if (limpar) limpar.onclick = async () => { if (await confirmar('Descartar esta nota?')) { notaRascunho = null; render(); } };
 
     document.getElementById('c-ler').onclick = async (e) => {
       lerCampos();
       if (!dados.temChave) { toast('Cadastre a chave da API em Configurações.', true); return; }
-      if (n.itens.length && !confirm('Ler de novo substitui os itens da tabela. Continuar?')) return;
+      if (n.itens.length && !await confirmar('Ler de novo substitui os itens da tabela. Continuar?')) return;
       ultimaSalva = null;
       const b = e.currentTarget;
       b.disabled = true;
@@ -890,7 +908,7 @@ setTimeout(function () {
       const docNorm = (d) => String(d == null ? '' : d).replace(/\D/g, '').replace(/^0+/, '');
       const doc = docNorm(n.documento);
       const repetida = doc && dados.compras.find((c) => docNorm(c.documento) === doc);
-      if (repetida && !confirm(`A nota nº ${n.documento} já foi lançada em ${diaBR(repetida.dia)} (${repetida.fornecedor || 'sem fornecedor'}).\n\nLançar de novo? Se for a mesma nota, ela vai contar em dobro no CMV.`)) {
+      if (repetida && !await confirmar(`A nota nº ${n.documento} já foi lançada em ${diaBR(repetida.dia)} (${repetida.fornecedor || 'sem fornecedor'}).\n\nLançar de novo? Se for a mesma nota, ela vai contar em dobro no CMV.`)) {
         salvar.disabled = false;
         salvar.textContent = 'Salvar compra';
         return;
@@ -910,7 +928,7 @@ setTimeout(function () {
         // do dia). A compra não depende da foto: oferece salvar sem ela.
         const msg = String(err && err.message || err);
         if (n.fotos.length && /drive|limite|limit|armazenamento|storage/i.test(msg) &&
-            confirm('O Google Drive recusou guardar a foto da nota (' + msg + ').\n\nSalvar a compra sem a foto? Os itens e os custos são gravados normalmente.')) {
+            await confirmar('O Google Drive recusou guardar a foto da nota (' + msg + ').\n\nSalvar a compra sem a foto? Os itens e os custos são gravados normalmente.')) {
           try {
             await concluir(await chamar('salvarCompra', { ...dadosCompra, fotos: [] }));
             return;
@@ -927,7 +945,7 @@ setTimeout(function () {
 
     conteudo.querySelectorAll('[data-excluir]').forEach((b) => {
       b.onclick = async () => {
-        if (!confirm('Excluir esta compra? Os custos que vieram dela também serão removidos.')) return;
+        if (!await confirmar('Excluir esta compra? Os custos que vieram dela também serão removidos.')) return;
         try { await chamar('excluirCompra', b.dataset.excluir); await recarregar(); toast('Compra excluída'); }
         catch (err) { toast(err.message, true); }
       };
@@ -1172,12 +1190,12 @@ setTimeout(function () {
       render();
     };
     const limpar = document.getElementById('b-limpar');
-    if (limpar) limpar.onclick = () => { if (confirm('Descartar este boleto?')) { boletoRascunho = null; render(); } };
+    if (limpar) limpar.onclick = async () => { if (await confirmar('Descartar este boleto?')) { boletoRascunho = null; render(); } };
 
     document.getElementById('b-ler').onclick = async (e) => {
       if (!dados.temChave) { toast('Cadastre a chave da API em Configurações.', true); return; }
       lerForm();
-      if (b.boletos.length && !confirm('Ler de novo substitui os dados preenchidos. Continuar?')) return;
+      if (b.boletos.length && !await confirmar('Ler de novo substitui os dados preenchidos. Continuar?')) return;
       const bt = e.currentTarget;
       bt.disabled = true;
       bt.innerHTML = '<span class="carregando"></span> Lendo o boleto…';
@@ -1213,7 +1231,7 @@ setTimeout(function () {
         catch (err) {
           const msg = String(err && err.message || err);
           if (!(b.fotos.length && /drive|limite|limit|armazenamento|storage/i.test(msg) &&
-            confirm('O Google Drive recusou guardar o arquivo do boleto (' + msg + ').\n\nSalvar a conta sem o arquivo?'))) throw err;
+            await confirmar('O Google Drive recusou guardar o arquivo do boleto (' + msg + ').\n\nSalvar a conta sem o arquivo?'))) throw err;
           r = await enviarLote([]);
         }
         boletoRascunho = null;
@@ -1242,7 +1260,7 @@ setTimeout(function () {
     });
     conteudo.querySelectorAll('[data-excluir-conta]').forEach((x) => {
       x.onclick = async () => {
-        if (!confirm('Excluir esta conta?')) return;
+        if (!await confirmar('Excluir esta conta?')) return;
         try { await chamar('excluirConta', x.dataset.excluirConta); await recarregar(); toast('Conta excluída'); }
         catch (err) { toast(err.message || 'Erro', true); }
       };

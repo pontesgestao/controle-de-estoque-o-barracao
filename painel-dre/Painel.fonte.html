@@ -208,6 +208,7 @@
   <nav class="abas" role="tablist">
     <button role="tab" data-aba="resultado">Resultado</button>
     <button role="tab" data-aba="compras">Compras</button>
+    <button role="tab" data-aba="despesas">Despesas</button>
     <button role="tab" data-aba="contas">Contas</button>
     <button role="tab" data-aba="custos">Custos</button>
     <button role="tab" data-aba="contagens">Contagens</button>
@@ -298,6 +299,9 @@ setTimeout(function () {
   let periodoSel = null;
   let notaRascunho = null;
   let boletoRascunho = null;
+  let despesaRascunho = null;
+  let despesaSalva = null;
+  let mesDespesas = null;
   let buscaProduto = '';
 
   document.querySelectorAll('nav.abas button').forEach((b) => {
@@ -464,7 +468,7 @@ setTimeout(function () {
     document.querySelectorAll('nav.abas button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.aba === aba)));
     if (!dados && aba !== 'config') { aba = 'config'; return render(); }
     if (dados) prepararCustos();
-    ({ resultado: telaResultado, compras: telaCompras, contas: telaContas, custos: telaCustos, contagens: telaContagens, config: telaConfig })[aba]();
+    ({ resultado: telaResultado, compras: telaCompras, despesas: telaDespesas, contas: telaContas, custos: telaCustos, contagens: telaContagens, config: telaConfig })[aba]();
   }
 
   // ----- Resultado -----
@@ -947,6 +951,175 @@ setTimeout(function () {
       b.onclick = async () => {
         if (!await confirmar('Excluir esta compra? Os custos que vieram dela também serão removidos.')) return;
         try { await chamar('excluirCompra', b.dataset.excluir); await recarregar(); toast('Compra excluída'); }
+        catch (err) { toast(err.message, true); }
+      };
+    });
+  }
+
+  // ----- Despesas (gás, depósito, material de construção…) -----
+  // Mesmo esquema da compra (foto → IA → conferir → salvar), mas grava na aba
+  // "Despesas": não mexe em estoque, custos nem CMV.
+  const CATEGORIAS_DESPESA = ['Gás', 'Depósito', 'Material de construção', 'Manutenção e reparos',
+    'Utensílios e equipamentos', 'Limpeza', 'Outras despesas'];
+  function telaDespesas() {
+    if ((dados.versaoServidor || 0) < 7 || !dados.despesas) {
+      conteudo.innerHTML = `<div class="cartao" style="max-width:640px"><h2>Despesas</h2>
+        <p class="alerta erro"><strong>Falta atualizar o código do painel no Google</strong>Para usar as despesas, copie o arquivo
+        <a href="https://raw.githubusercontent.com/pontesgestao/controle-de-estoque-o-barracao/painel-dre/painel-dre/Codigo.gs" target="_blank" rel="noopener">Codigo.gs</a>,
+        cole no projeto do painel e publique uma nova versão (Implantar → Gerenciar implantações → Editar → Nova versão).</p></div>`;
+      return;
+    }
+    const ls = lojas();
+    const lista = dados.despesas;
+    const categorias = [...new Set(CATEGORIAS_DESPESA.concat(lista.map((d) => d.categoria).filter(Boolean)))];
+    if (!despesaRascunho) despesaRascunho = { loja: ls[0] || '', dia: hoje(), fornecedor: '', documento: '', categoria: '', descricao: '', valor: '', fotos: [], itens: [], aviso: '' };
+    const n = despesaRascunho;
+
+    const meses = [...new Set(lista.map((d) => d.dia.slice(0, 7)).concat([hoje().slice(0, 7)]))].sort().reverse();
+    if (!mesDespesas || !meses.includes(mesDespesas)) mesDespesas = meses[0];
+    const doMes = lista.filter((d) => d.dia.slice(0, 7) === mesDespesas).sort((a, b) => b.dia.localeCompare(a.dia));
+    const totalMes = doMes.reduce((s, d) => s + (d.valor || 0), 0);
+    const porCat = {};
+    doMes.forEach((d) => { porCat[d.categoria || 'Sem categoria'] = (porCat[d.categoria || 'Sem categoria'] || 0) + (d.valor || 0); });
+    const nomeMes = (m) => new Date(m + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+    conteudo.innerHTML = `
+      ${despesaSalva ? `<div class="cartao salva">
+        <p><strong>Despesa salva:</strong> ${esc(despesaSalva)}</p>
+        <button class="btn btn-primario" id="d-outra">📷 Lançar outra despesa</button>
+      </div>` : ''}
+      <div class="cartao">
+        <h2>Lançar despesa</h2>
+        <p class="dica">Gás, depósito, material de construção, manutenção e outras notas que <strong>não são insumo</strong>. Envie a foto ou o PDF; a IA lê e você confere antes de salvar. Despesas <strong>não entram no CMV</strong> nem mexem no estoque.</p>
+        <div class="botoes-arquivo">
+          <label class="btn btn-primario btn-camera">📷 ${n.fotos.length ? 'Fotografar outra folha' : 'Fotografar nota'}
+            <input type="file" id="d-camera" accept="image/*" capture="environment" hidden></label>
+          <label class="btn btn-secundario">📎 Galeria ou PDF
+            <input type="file" id="d-fotos" accept="image/*,application/pdf,.pdf" multiple hidden></label>
+        </div>
+        <div class="fotos">${n.fotos.map((f, i) => `<div class="arquivo">${f.tipo === 'application/pdf'
+          ? `<div class="pdf"><strong>PDF</strong>${esc(f.nome)}</div>`
+          : `<img src="data:image/jpeg;base64,${f.dados}" alt="Foto da nota">`}
+          <button class="remover" data-remover-arquivo="${i}" aria-label="Remover arquivo">✕</button></div>`).join('')}</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+          <button class="btn btn-primario" id="d-ler" ${n.fotos.length ? '' : 'disabled'}>Ler nota com IA</button>
+          ${n.fotos.length || n.fornecedor || n.valor ? '<button class="btn btn-perigo" id="d-limpar">Limpar</button>' : ''}
+        </div>
+        ${dados.temChave ? '' : '<p class="alerta" style="margin-bottom:12px">Para a leitura automática, cadastre a chave da API na aba <strong>Configurações</strong>. Enquanto isso, preencha à mão.</p>'}
+        ${n.aviso ? `<p class="alerta" style="margin-bottom:12px"><strong>Aviso da leitura</strong>${esc(n.aviso)}</p>` : ''}
+        <div class="grade-form">
+          <label class="campo">Loja<select id="d-loja">${ls.map((l) => `<option ${l === n.loja ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+          <label class="campo">Data<input type="date" id="d-dia" value="${esc(n.dia)}"></label>
+          <label class="campo">Fornecedor<input type="text" id="d-fornecedor" value="${esc(n.fornecedor)}"></label>
+          <label class="campo">Nº da nota/cupom<input type="text" id="d-documento" value="${esc(n.documento)}"></label>
+          <label class="campo">Categoria<input type="text" id="d-categoria" list="d-cats" value="${esc(n.categoria)}" placeholder="Escolha ou digite">
+            <datalist id="d-cats">${categorias.map((c) => `<option value="${esc(c)}">`).join('')}</datalist></label>
+          <label class="campo">Valor total (R$)<input type="text" inputmode="decimal" id="d-valor" class="num" value="${esc(n.valor)}"></label>
+        </div>
+        <label class="campo" style="margin-top:10px">Descrição<input type="text" id="d-descricao" value="${esc(n.descricao)}" placeholder="O que foi comprado"></label>
+        ${n.itens.length ? `<details style="margin-top:10px"><summary class="dica">Itens lidos na nota (${n.itens.length})</summary>
+          <div class="tabela-wrap"><table><tbody>${n.itens.map((it) => `<tr><td>${esc(it.descricao)}</td><td class="r num">${dinheiro(it.valorTotal)}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
+        <div class="rodape-nota"><span></span><button class="btn btn-azul" id="d-salvar">Salvar despesa</button></div>
+      </div>
+
+      <div class="cartao">
+        <div class="linha-titulo"><h2>Despesas lançadas</h2>
+          <select id="d-mes" style="max-width:220px">${meses.map((m) => `<option value="${m}" ${m === mesDespesas ? 'selected' : ''}>${esc(nomeMes(m))}</option>`).join('')}</select></div>
+        <p class="dica">Total do mês: <strong class="num">${dinheiro(totalMes)}</strong>${Object.keys(porCat).length ? ' · ' +
+          Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `${esc(c)} <span class="num">${dinheiro(v)}</span>`).join(' · ') : ''}</p>
+        ${doMes.length ? `<div class="tabela-wrap"><table>
+          <thead><tr><th>Data</th><th>Loja</th><th>Fornecedor</th><th>Categoria</th><th>Descrição</th><th class="r">Valor</th><th></th></tr></thead>
+          <tbody>${doMes.map((d) => `<tr>
+            <td>${diaBR(d.dia)}</td><td>${esc(d.loja)}</td><td>${esc(d.fornecedor)}${d.documento ? `<div class="desc">nº ${esc(d.documento)}</div>` : ''}</td>
+            <td>${esc(d.categoria)}</td><td>${esc(d.descricao)}</td><td class="r num">${dinheiro(d.valor)}</td>
+            <td style="white-space:nowrap">${d.arquivo ? d.arquivo.split(' ').map((u, i) => `<a class="btn-texto" href="${esc(u)}" target="_blank" rel="noopener">arquivo ${i + 1}</a>`).join(' ') : ''}
+              <button class="btn btn-perigo" data-excluir="${esc(d.id)}">Excluir</button></td></tr>`).join('')}</tbody>
+        </table></div>` : '<div class="vazio">Nenhuma despesa lançada neste mês.</div>'}
+      </div>`;
+
+    const lerCampos = () => {
+      ['loja', 'dia', 'fornecedor', 'documento', 'categoria', 'valor', 'descricao'].forEach((k) => { n[k] = document.getElementById('d-' + k).value; });
+    };
+    ['loja', 'dia', 'fornecedor', 'documento', 'categoria', 'valor', 'descricao'].forEach((k) => { document.getElementById('d-' + k).onchange = lerCampos; });
+    document.getElementById('d-mes').onchange = (e) => { lerCampos(); mesDespesas = e.target.value; render(); };
+
+    const receberArquivos = async (e) => {
+      lerCampos();
+      for (const a of [...e.target.files]) {
+        try { n.fotos.push(await prepararArquivo(a)); } catch (err) { toast(err.message, true); }
+      }
+      render();
+    };
+    document.getElementById('d-fotos').onchange = receberArquivos;
+    document.getElementById('d-camera').onchange = receberArquivos;
+    const outra = document.getElementById('d-outra');
+    if (outra) outra.onclick = () => { despesaSalva = null; document.getElementById('d-camera').click(); };
+    conteudo.querySelectorAll('[data-remover-arquivo]').forEach((b) => {
+      b.onclick = () => { lerCampos(); n.fotos.splice(Number(b.dataset.removerArquivo), 1); render(); };
+    });
+    const limpar = document.getElementById('d-limpar');
+    if (limpar) limpar.onclick = async () => { if (await confirmar('Descartar esta despesa?')) { despesaRascunho = null; render(); } };
+
+    document.getElementById('d-ler').onclick = async (e) => {
+      lerCampos();
+      if (!dados.temChave) { toast('Cadastre a chave da API em Configurações.', true); return; }
+      despesaSalva = null;
+      const b = e.currentTarget;
+      b.disabled = true;
+      b.innerHTML = '<span class="carregando"></span> Lendo a nota… (até 1 minuto)';
+      try {
+        const r = await chamar('lerDespesa', n.fotos, categorias);
+        if (r.fornecedor) n.fornecedor = r.fornecedor;
+        if (r.documento) n.documento = r.documento;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(r.data || '')) n.dia = r.data;
+        if (r.valorTotal) n.valor = String(Math.round(r.valorTotal * 100) / 100).replace('.', ',');
+        if (r.descricao) n.descricao = r.descricao;
+        if (r.categoria) n.categoria = r.categoria;
+        n.itens = r.itens || [];
+        n.aviso = r.aviso || '';
+        toast('Nota lida. Confira antes de salvar.');
+      } catch (err) {
+        toast(err.message || 'Erro ao ler a nota', true);
+      }
+      render();
+    };
+
+    document.getElementById('d-salvar').onclick = async (e) => {
+      lerCampos();
+      const valor = numero(n.valor);
+      const problemas = [];
+      if (!n.loja || !n.dia) problemas.push('informe a loja e a data');
+      if (!n.categoria.trim()) problemas.push('escolha a categoria');
+      if (!valor || valor <= 0) problemas.push('informe o valor');
+      if (problemas.length) { toast('Antes de salvar: ' + problemas.join('; '), true); return; }
+      const docNorm = (d) => String(d == null ? '' : d).replace(/\D/g, '').replace(/^0+/, '');
+      const doc = docNorm(n.documento);
+      const repetida = doc && dados.despesas.find((d) => docNorm(d.documento) === doc);
+      if (repetida && !await confirmar(`A nota nº ${n.documento} já foi lançada como despesa em ${diaBR(repetida.dia)} (${repetida.fornecedor || 'sem fornecedor'}, ${dinheiro(repetida.valor)}).\n\nLançar de novo?`)) return;
+      const b = e.currentTarget;
+      b.disabled = true;
+      b.innerHTML = '<span class="carregando"></span> Salvando…';
+      const enviar = { loja: n.loja, dia: n.dia, fornecedor: n.fornecedor, documento: n.documento, categoria: n.categoria.trim(),
+        descricao: n.descricao, valor, fotos: n.fotos };
+      try {
+        const r = await chamar('salvarDespesa', enviar);
+        despesaSalva = `${n.fornecedor || 'despesa'} · ${n.categoria} · ${diaBR(n.dia)} · ${dinheiro(valor)}`;
+        mesDespesas = n.dia.slice(0, 7);
+        despesaRascunho = null;
+        await recarregar();
+        window.scrollTo(0, 0);
+        toast(r && r.avisoFotos ? 'Despesa salva, mas sem a foto: ' + r.avisoFotos : 'Despesa salva', !!(r && r.avisoFotos));
+      } catch (err) {
+        toast('Não foi possível salvar: ' + (err && err.message || err), true);
+        b.disabled = false;
+        b.textContent = 'Salvar despesa';
+      }
+    };
+
+    conteudo.querySelectorAll('[data-excluir]').forEach((b) => {
+      b.onclick = async () => {
+        if (!await confirmar('Excluir esta despesa?')) return;
+        try { await chamar('excluirDespesa', b.dataset.excluir); await recarregar(); toast('Despesa excluída'); }
         catch (err) { toast(err.message, true); }
       };
     });

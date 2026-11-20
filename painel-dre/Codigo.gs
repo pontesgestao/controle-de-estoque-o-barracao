@@ -22,6 +22,9 @@ const CAB_FATURAMENTO = ['Loja', 'Contagem inicial (ID)', 'Contagem final (ID)',
   'Salão (R$)', 'iFood (R$)'];
 const CAB_IGNORADAS = ['ID contagem', 'Loja', 'Data', 'Ignorada em'];
 const CAB_PRODUTOS = ['Categoria', 'Produto', 'Criado em'];
+const ABA_DESPESAS = 'Despesas';
+const CAB_DESPESAS = ['ID', 'Data', 'Loja', 'Fornecedor', 'Nº documento', 'Categoria', 'Descrição', 'Valor (R$)',
+  'Arquivo', 'Lançado em', 'Lançado por'];
 const ABA_CONTAS = 'Contas a pagar';
 const CAB_CONTAS = ['ID', 'Vencimento', 'Beneficiário', 'Descrição', 'Valor (R$)', 'Linha digitável', 'Situação',
   'Pago em', 'Arquivo', 'Lançado em'];
@@ -31,7 +34,7 @@ const PASTA_FOTOS = 'O Barracão - Notas fiscais';
 
 // Versão desta parte do código (a que fica colada no Google). A tela avisa
 // quando precisa de uma versão mais nova.
-const VERSAO_SERVIDOR = 6;
+const VERSAO_SERVIDOR = 7;
 
 // A tela do painel vem do GitHub a cada abertura, assim as melhorias chegam
 // sem precisar colar nada. Sem conexão com o GitHub, usa a cópia local "Painel".
@@ -145,8 +148,14 @@ function carregarDados() {
       valor: num_(r[4]), linha: String(r[5]), situacao: String(r[6]), pagoEm: fmt(r[7], 'yyyy-MM-dd'), arquivo: String(r[8]) };
   });
 
+  const despesas = linhas_(ss, ABA_DESPESAS, CAB_DESPESAS).map(function (r) {
+    return { id: String(r[0]), dia: fmt(r[1], 'yyyy-MM-dd'), loja: String(r[2]), fornecedor: String(r[3]), documento: String(r[4]),
+      categoria: String(r[5]), descricao: String(r[6]), valor: num_(r[7]), arquivo: String(r[8]), por: String(r[10]) };
+  });
+
   return {
     contas: contas,
+    despesas: despesas,
     telegram: estadoTelegram_(),
     contagens: Object.keys(contagens).map(function (k) { return contagens[k]; }),
     ignoradas: ignoradas, produtosNovos: produtosNovos, compras: compras, custos: custos, faturamento: faturamento,
@@ -313,6 +322,101 @@ function excluirCompra(id) {
       if (String(valores[i][a[2]]) === id) aba.deleteRow(i + 1);
     }
   });
+  return true;
+}
+
+// ---------- Despesas (não entram no CMV) ----------
+// Notas de gás, depósito, material de construção, manutenção etc. Ficam na
+// aba "Despesas" da planilha, uma linha por nota, e não mexem em estoque,
+// custos nem CMV.
+
+/** Lê a nota de uma despesa: fornecedor, data, total e um resumo dos itens. */
+function lerDespesa(fotos, categorias) {
+  const instrucoes =
+    'Você lê fotos e PDFs de notas fiscais, cupons fiscais e recibos brasileiros de DESPESAS de um restaurante ' +
+    '(O Barracão): gás, depósito, material de construção, manutenção, utensílios e outras compras que não são ' +
+    'insumo de cozinha.\n\n' +
+    'Informe:\n' +
+    '- fornecedor: o nome do emitente, curto, sem CNPJ.\n' +
+    '- documento: o número da nota, cupom ou recibo.\n' +
+    '- data: a data de emissão no formato AAAA-MM-DD.\n' +
+    '- valorTotal: o valor total pago na nota, em reais (com descontos, frete e impostos já somados).\n' +
+    '- descricao: um resumo curto do que foi comprado, em português (ex.: "2 botijões de gás P13", ' +
+    '"Cimento 50 kg (3), areia, tubos PVC").\n' +
+    '- categoria: a categoria mais adequada desta lista: ' + categorias.join(', ') + '. Se nenhuma servir, sugira um nome curto.\n' +
+    '- itens: cada item da nota com descricao (como está na nota) e valorTotal (valor total do item).\n' +
+    'Deixe vazio (ou 0) o que não estiver legível; não invente valores.\n' +
+    'Em "aviso", escreva em português, numa frase curta, o que a pessoa precisa saber (ex.: nota com mais de uma ' +
+    'folha e alguma faltando, valor ilegível, não parece uma nota). Deixe vazio quando não houver nada.';
+  const conteudo = anexos_(fotos);
+  conteudo.push({ type: 'text', text: 'Extraia os dados desta nota de despesa.' });
+  const esquema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['fornecedor', 'documento', 'data', 'valorTotal', 'descricao', 'categoria', 'aviso', 'itens'],
+    properties: {
+      fornecedor: { type: 'string' },
+      documento: { type: 'string' },
+      data: { type: 'string' },
+      valorTotal: { type: 'number' },
+      descricao: { type: 'string' },
+      categoria: { type: 'string' },
+      aviso: { type: 'string' },
+      itens: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['descricao', 'valorTotal'],
+          properties: { descricao: { type: 'string' }, valorTotal: { type: 'number' } },
+        },
+      },
+    },
+  };
+  return chamarIA_(instrucoes, conteudo, esquema, 'a nota');
+}
+
+function salvarDespesa(d) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d.dia))) throw new Error('Informe a data da despesa.');
+  const valor = Number(d.valor);
+  if (!isFinite(valor) || valor <= 0) throw new Error('Informe o valor da despesa.');
+  if (!String(d.categoria || '').trim()) throw new Error('Escolha a categoria da despesa.');
+  const ss = planilha_();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const id = Utilities.getUuid().slice(0, 8);
+    let arquivo = '';
+    let avisoFotos = '';
+    if (d.fotos && d.fotos.length) {
+      try {
+        const pasta = pastaFotos_();
+        arquivo = d.fotos.map(function (arq, i) {
+          const pdf = arq.tipo === 'application/pdf';
+          const blob = Utilities.newBlob(Utilities.base64Decode(arq.dados), pdf ? 'application/pdf' : 'image/jpeg',
+            d.dia + ' Despesa ' + (d.fornecedor || 'nota') + ' ' + (i + 1) + (pdf ? '.pdf' : '.jpg'));
+          return guardarArquivo_(pasta, blob, ss);
+        }).join(' ');
+      } catch (e) {
+        arquivo = '';
+        avisoFotos = 'o Google Drive recusou a foto (' + String(e && e.message || e) + ').';
+      }
+    }
+    const aba = aba_(ss, ABA_DESPESAS, CAB_DESPESAS);
+    aba.appendRow([id, new Date(d.dia + 'T12:00:00'), texto_(d.loja), texto_(d.fornecedor), texto_(d.documento),
+      texto_(d.categoria), texto_(d.descricao), valor, arquivo, new Date(), Session.getActiveUser().getEmail() || '']);
+    return { id: id, avisoFotos: avisoFotos };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function excluirDespesa(id) {
+  const aba = aba_(planilha_(), ABA_DESPESAS, CAB_DESPESAS);
+  const valores = aba.getDataRange().getValues();
+  for (let i = valores.length - 1; i >= 1; i--) {
+    if (String(valores[i][0]) === String(id)) aba.deleteRow(i + 1);
+  }
   return true;
 }
 

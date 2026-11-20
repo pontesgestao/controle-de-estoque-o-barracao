@@ -31,7 +31,7 @@ const PASTA_FOTOS = 'O Barracão - Notas fiscais';
 
 // Versão desta parte do código (a que fica colada no Google). A tela avisa
 // quando precisa de uma versão mais nova.
-const VERSAO_SERVIDOR = 5;
+const VERSAO_SERVIDOR = 6;
 
 // A tela do painel vem do GitHub a cada abertura, assim as melhorias chegam
 // sem precisar colar nada. Sem conexão com o GitHub, usa a cópia local "Painel".
@@ -273,7 +273,7 @@ function salvarCompra(compra) {
           const pdf = arq.tipo === 'application/pdf';
           const blob = Utilities.newBlob(Utilities.base64Decode(arq.dados), pdf ? 'application/pdf' : 'image/jpeg',
             compra.dia + ' ' + compra.loja + ' ' + (compra.fornecedor || 'nota') + ' ' + (i + 1) + (pdf ? '.pdf' : '.jpg'));
-          return pasta.createFile(blob).getUrl();
+          return guardarArquivo_(pasta, blob, ss);
         }).join(' ');
       } catch (e) {
         fotos = '';
@@ -381,7 +381,7 @@ function salvarContas(lote) {
           const pdf = arq.tipo === 'application/pdf';
           const blob = Utilities.newBlob(Utilities.base64Decode(arq.dados), pdf ? 'application/pdf' : 'image/jpeg',
             'Boleto ' + (lote.contas[0] ? lote.contas[0].beneficiario : '') + ' ' + (i + 1) + (pdf ? '.pdf' : '.jpg'));
-          return pasta.createFile(blob).getUrl();
+          return guardarArquivo_(pasta, blob, ss);
         }).join(' ');
       } catch (e) {
         arquivo = '';
@@ -739,15 +739,37 @@ function linhas_(ss, nome, cabecalho) {
   return aba.getRange(2, 1, aba.getLastRow() - 1, cabecalho.length).getValues();
 }
 
+// O painel roda com a conta de quem está usando, então cada foto fica no
+// Drive de quem lançou. Pasta comum: a primeira criada (guardada no script).
+// Quem não tem acesso a ela usa uma pasta própria, sem trocar a de todos.
 function pastaFotos_() {
   const p = props_();
   const id = p.getProperty('PASTA_FOTOS_ID');
   if (id) {
-    try { return DriveApp.getFolderById(id); } catch (e) { /* pasta apagada: cria outra */ }
+    try { const f = DriveApp.getFolderById(id); f.getName(); return f; } catch (e) { /* sem acesso ou apagada */ }
+  }
+  const u = PropertiesService.getUserProperties();
+  const meu = u.getProperty('PASTA_FOTOS_ID');
+  if (meu) {
+    try { const f = DriveApp.getFolderById(meu); f.getName(); return f; } catch (e) { /* apagada: cria outra */ }
   }
   const pasta = DriveApp.createFolder(PASTA_FOTOS);
-  p.setProperty('PASTA_FOTOS_ID', pasta.getId());
+  (id ? u : p).setProperty('PASTA_FOTOS_ID', pasta.getId());
   return pasta;
+}
+
+// Grava a foto e deixa o dono e os editores da planilha verem, para o link
+// abrir para todos (e não só para quem lançou).
+function guardarArquivo_(pasta, blob, ss) {
+  const arq = pasta.createFile(blob);
+  try {
+    const eu = Session.getActiveUser().getEmail();
+    const plan = DriveApp.getFileById(ss.getId());
+    const pessoas = [plan.getOwner()].concat(plan.getEditors()).map(function (x) { return x && x.getEmail(); })
+      .filter(function (e, i, a) { return e && e !== eu && a.indexOf(e) === i; });
+    if (pessoas.length) arq.addViewers(pessoas);
+  } catch (e) { /* sem permissão para compartilhar: a foto fica só com quem lançou */ }
+  return arq.getUrl();
 }
 
 function num_(v) {

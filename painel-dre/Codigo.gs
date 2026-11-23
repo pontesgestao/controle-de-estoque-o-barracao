@@ -25,6 +25,8 @@ const CAB_PRODUTOS = ['Categoria', 'Produto', 'Criado em'];
 const ABA_DESPESAS = 'Despesas';
 const CAB_DESPESAS = ['ID', 'Data', 'Loja', 'Fornecedor', 'Nº documento', 'Categoria', 'Descrição', 'Valor (R$)',
   'Arquivo', 'Lançado em', 'Lançado por'];
+const ABA_EQUIPE = 'Equipe';
+const CAB_EQUIPE = ['Tipo', 'ID', 'Nome', 'Dados', 'Atualizado em'];
 const ABA_CONTAS = 'Contas a pagar';
 const CAB_CONTAS = ['ID', 'Vencimento', 'Beneficiário', 'Descrição', 'Valor (R$)', 'Linha digitável', 'Situação',
   'Pago em', 'Arquivo', 'Lançado em'];
@@ -34,7 +36,7 @@ const PASTA_FOTOS = 'O Barracão - Notas fiscais';
 
 // Versão desta parte do código (a que fica colada no Google). A tela avisa
 // quando precisa de uma versão mais nova.
-const VERSAO_SERVIDOR = 8;
+const VERSAO_SERVIDOR = 9;
 
 // A tela do painel vem do GitHub a cada abertura, assim as melhorias chegam
 // sem precisar colar nada. Sem conexão com o GitHub, usa a cópia local "Painel".
@@ -125,6 +127,7 @@ const FUNCOES = {
   lerBoleto: 'admin', salvarContas: 'admin', marcarContaPaga: 'admin', excluirConta: 'admin',
   conectarTelegram: 'admin', adicionarChatTelegram: 'admin', desconectarTelegram: 'admin', ativarAvisoDiario: 'admin',
   testarTelegram: 'admin', salvarUsuario: 'admin', removerUsuario: 'admin',
+  carregarEquipe: 'admin', salvarItemEquipe: 'admin', excluirItemEquipe: 'admin',
 };
 const IMPLEMENTACAO = {
   obterConfig: function () { return obterConfig_(); }, carregarDados: function () { return carregarDados_(); },
@@ -136,6 +139,7 @@ const IMPLEMENTACAO = {
   adicionarChatTelegram: adicionarChatTelegram_, desconectarTelegram: function () { return desconectarTelegram_(); },
   ativarAvisoDiario: ativarAvisoDiario_, testarTelegram: function () { return testarTelegram_(); },
   salvarUsuario: salvarUsuario_, removerUsuario: removerUsuario_,
+  carregarEquipe: function () { return carregarEquipe_(); }, salvarItemEquipe: salvarItemEquipe_, excluirItemEquipe: excluirItemEquipe_,
 };
 
 /** Chamada pela tela aberta no link do Google (google.script.run). */
@@ -593,6 +597,60 @@ function excluirDespesa_(id) {
   const valores = aba.getDataRange().getValues();
   for (let i = valores.length - 1; i >= 1; i--) {
     if (String(valores[i][0]) === String(id)) aba.deleteRow(i + 1);
+  }
+  return true;
+}
+
+// ---------- Organograma (equipe, cargas horárias e salários) ----------
+// Fica na aba "Equipe" da planilha, uma linha por item. Só "admin" acessa.
+const TIPOS_EQUIPE = { funcionario: true, carga: true, salario: true };
+
+function carregarEquipe_() {
+  const r = { funcionario: [], carga: [], salario: [] };
+  linhas_(planilha_(), ABA_EQUIPE, CAB_EQUIPE).forEach(function (l) {
+    const tipo = String(l[0]);
+    if (!TIPOS_EQUIPE[tipo] || !l[1]) return;
+    let dados = {};
+    try { dados = JSON.parse(String(l[3] || '{}')); } catch (e) { dados = {}; }
+    dados.id = String(l[1]);
+    r[tipo].push(dados);
+  });
+  return r;
+}
+
+function salvarItemEquipe_(tipo, id, dados) {
+  if (!TIPOS_EQUIPE[tipo]) throw new Error('Tipo inválido.');
+  const limpo = {};
+  Object.keys(dados || {}).forEach(function (k) {
+    if (k === 'id') return;
+    const v = dados[k];
+    limpo[k] = typeof v === 'string' ? v.slice(0, 200) : (typeof v === 'number' || v === null || typeof v === 'boolean') ? v : String(v);
+  });
+  id = String(id || Utilities.getUuid().slice(0, 12));
+  const linha = [tipo, id, texto_(limpo.nome || ''), JSON.stringify(limpo), new Date()];
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const aba = aba_(planilha_(), ABA_EQUIPE, CAB_EQUIPE);
+    const valores = aba.getDataRange().getValues();
+    for (let i = 1; i < valores.length; i++) {
+      if (String(valores[i][0]) === tipo && String(valores[i][1]) === id) {
+        aba.getRange(i + 1, 1, 1, CAB_EQUIPE.length).setValues([linha]);
+        return id;
+      }
+    }
+    aba.appendRow(linha);
+    return id;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function excluirItemEquipe_(tipo, id) {
+  const aba = aba_(planilha_(), ABA_EQUIPE, CAB_EQUIPE);
+  const valores = aba.getDataRange().getValues();
+  for (let i = valores.length - 1; i >= 1; i--) {
+    if (String(valores[i][0]) === tipo && String(valores[i][1]) === String(id)) aba.deleteRow(i + 1);
   }
   return true;
 }

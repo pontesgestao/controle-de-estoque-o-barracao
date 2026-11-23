@@ -35,6 +35,9 @@
   nav.abas button { border: 0; background: transparent; color: #fff; opacity: .85; padding: 10px 14px; font-weight: 800; border-radius: 10px 10px 0 0; white-space: nowrap; }
   nav.abas button[aria-selected="true"] { background: var(--fundo); color: var(--laranja-escuro); opacity: 1; }
 
+  .sair { background: rgba(255,255,255,.18); color: #fff; border: 1.5px solid rgba(255,255,255,.55); border-radius: 8px; padding: 4px 10px; font-weight: 800; font-size: .82rem; white-space: nowrap; }
+  .login { max-width: 400px; margin: 24px auto; }
+  .login form { display: flex; flex-direction: column; gap: 12px; }
   main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 60px; }
   .cartao { background: var(--cartao); border-radius: var(--raio); box-shadow: var(--sombra); padding: 18px; margin-bottom: 16px; }
   .cartao > h2 { font-size: 1.15rem; color: var(--azul); margin-bottom: 12px; }
@@ -261,8 +264,75 @@ setTimeout(function () {
   };
   const numeroSimples = (t) => { const n = Number(String(t).replace(',', '.')); return String(t).trim() === '' || !isFinite(n) ? null : n; };
 
+  // O painel abre de dois jeitos: pelo link do Google (google.script.run,
+  // com a conta Google logada) ou pela página no GitHub, com usuário e senha
+  // (chamadas pela internet para a implantação "Executar como: Eu").
+  const URL_API = 'https://script.google.com/macros/s/AKfycbyb1XDCUwXE-yitnZDH9phJPfb---D3uie-IBUaDD6GJsspKKDnQnQQ-JOjTytLj53p/exec';
+  const MODO_GOOGLE = !!(window.google && google.script && google.script.run);
+  const CHAVE_LOGIN = 'obarracao-painel-login-v1';
+  let login = null;
+  try { login = JSON.parse(localStorage.getItem(CHAVE_LOGIN)); } catch (e) { login = null; }
   function chamar(fn, ...args) {
-    return new Promise((ok, falha) => google.script.run.withSuccessHandler(ok).withFailureHandler(falha)[fn](...args));
+    if (MODO_GOOGLE) {
+      return new Promise((ok, falha) => {
+        const run = google.script.run.withSuccessHandler(ok).withFailureHandler(falha);
+        // Código antigo no Google (antes do login) não tem api(): chama direto.
+        if (typeof run.api === 'function') run.api(fn, args); else run[fn](...args);
+      });
+    }
+    return postar({ fn, args, token: login && login.token }).then((j) => {
+      if (!j.ok) {
+        if (/^LOGIN/.test(j.erro || '')) sair(j.erro.replace(/^LOGIN:\s*/, ''));
+        throw new Error(j.erro || 'Erro no painel');
+      }
+      return j.resultado;
+    });
+  }
+  async function postar(corpo) {
+    if (!URL_API) throw new Error('O endereço do painel ainda não foi configurado nesta página.');
+    let r;
+    try {
+      r = await fetch(URL_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(corpo) });
+    } catch (e) { throw new Error('Sem conexão com o painel. Confira a internet e tente de novo.'); }
+    try { return await r.json(); } catch (e) { throw new Error('O painel respondeu de um jeito inesperado (HTTP ' + r.status + ').'); }
+  }
+  function sair(msg) {
+    login = null;
+    try { localStorage.removeItem(CHAVE_LOGIN); } catch (e) { /* sem armazenamento */ }
+    telaLogin(msg || '');
+  }
+  function telaLogin(msg) {
+    document.querySelector('nav.abas').hidden = true;
+    const sub = document.getElementById('sub-topo'); if (sub) sub.textContent = '';
+    const bs = document.getElementById('btn-sair'); if (bs) bs.remove();
+    conteudo.innerHTML = `<div class="cartao login">
+      <h2>Entrar no painel</h2>
+      ${msg ? `<p class="alerta erro" style="margin-bottom:12px">${esc(msg)}</p>` : ''}
+      <form id="form-login">
+        <label class="campo">Usuário<input id="l-usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+        <label class="campo">Senha<input id="l-senha" type="password" autocomplete="current-password" required></label>
+        <button class="btn btn-azul" id="l-entrar" type="submit">Entrar</button>
+      </form>
+      <p class="dica" style="margin-top:12px">Esqueceu a senha? Peça ao responsável para criar uma nova em Configurações → Usuários.</p>
+    </div>`;
+    document.getElementById('form-login').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const b = document.getElementById('l-entrar');
+      b.disabled = true;
+      b.innerHTML = '<span class="carregando"></span> Entrando…';
+      try {
+        const j = await postar({ acao: 'login', usuario: document.getElementById('l-usuario').value, senha: document.getElementById('l-senha').value });
+        if (!j.ok) throw new Error(j.erro || 'Não foi possível entrar.');
+        login = j.resultado;
+        try { localStorage.setItem(CHAVE_LOGIN, JSON.stringify(login)); } catch (err) { /* fica só nesta aba */ }
+        location.reload();
+      } catch (err) {
+        toast(err.message, true);
+        b.disabled = false;
+        b.textContent = 'Entrar';
+      }
+    });
+    setTimeout(() => { const u = document.getElementById('l-usuario'); if (u) u.focus(); }, 50);
   }
   function toast(msg, erro) {
     const t = document.createElement('div');
@@ -467,6 +537,7 @@ setTimeout(function () {
     limparGraficos();
     document.querySelectorAll('nav.abas button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.aba === aba)));
     if (!dados && aba !== 'config') { aba = 'config'; return render(); }
+    if (restrito && dados && !ABAS_RESTRITO.includes(aba)) aba = 'compras';
     if (dados) prepararCustos();
     ({ resultado: telaResultado, compras: telaCompras, despesas: telaDespesas, contas: telaContas, custos: telaCustos, contagens: telaContagens, config: telaConfig })[aba]();
   }
@@ -1562,6 +1633,27 @@ setTimeout(function () {
           <span class="dica" style="margin:0">${cfg.temChave ? '<span class="tag ok">cadastrada</span> deixe em branco para manter' : '<span class="tag alerta">não cadastrada</span>'}</span></label>
         <button class="btn btn-azul" id="cfg-salvar">Salvar</button>
       </div>
+      ${cfg.usuarios ? `
+      <div class="cartao" style="max-width:640px" id="cfg-usuarios">
+        <h2>Usuários do painel</h2>
+        <p class="dica">Quem entra pelo endereço <strong>pontesgestao.github.io/controle-de-estoque-o-barracao/painel.html</strong>, com usuário e senha.
+          <b>Acesso total</b> vê tudo e muda configurações. <b>Compras</b> só lança compras e despesas.</p>
+        ${cfg.usuarios.length ? `<div class="tabela-wrap"><table>
+          <thead><tr><th>Usuário</th><th>Nome</th><th>Acesso</th><th></th></tr></thead>
+          <tbody>${cfg.usuarios.map((u) => `<tr><td><strong>${esc(u.usuario)}</strong></td><td>${esc(u.nome)}</td>
+            <td>${u.papel === 'admin' ? '<span class="tag ok">Acesso total</span>' : '<span class="tag">Compras</span>'}</td>
+            <td style="white-space:nowrap"><button class="btn btn-texto" data-editar-usuario="${esc(u.usuario)}">Editar</button>
+              <button class="btn btn-perigo" data-remover-usuario="${esc(u.usuario)}">Remover</button></td></tr>`).join('')}</tbody>
+        </table></div>` : '<p class="alerta" style="margin-bottom:12px">Nenhum usuário ainda. Crie o seu primeiro, com acesso total.</p>'}
+        <div class="grade-form" style="margin-top:12px">
+          <label class="campo">Usuário<input id="u-usuario" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Ex.: isabelle"></label>
+          <label class="campo">Nome<input id="u-nome" autocomplete="off" placeholder="Ex.: Isabelle"></label>
+          <label class="campo">Acesso<select id="u-papel"><option value="admin">Acesso total</option><option value="compras" selected>Compras</option></select></label>
+          <label class="campo">Senha<input id="u-senha" type="password" autocomplete="new-password" placeholder="mín. 6 caracteres"></label>
+        </div>
+        <p class="dica" style="margin:8px 0 12px">Para trocar a senha de alguém, toque em Editar, digite a nova senha e salve. Senha em branco mantém a atual. Trocar a senha desconecta a pessoa dos aparelhos onde ela estava.</p>
+        <button class="btn btn-azul" id="u-salvar">Salvar usuário</button>
+      </div>` : ''}
       ${cfg.telegram ? (() => { const tg = cfg.telegram; return `
       <div class="cartao" style="max-width:640px" id="cfg-telegram">
         <h2>Aviso de contas no Telegram</h2>
@@ -1615,6 +1707,35 @@ setTimeout(function () {
         }
       };
     };
+    const uSalvar = document.getElementById('u-salvar');
+    if (uSalvar) {
+      uSalvar.onclick = async () => {
+        uSalvar.disabled = true;
+        try {
+          await chamar('salvarUsuario', { usuario: document.getElementById('u-usuario').value, nome: document.getElementById('u-nome').value,
+            papel: document.getElementById('u-papel').value, senha: document.getElementById('u-senha').value });
+          toast('Usuário salvo');
+          render();
+        } catch (err) { toast(err.message || String(err), true); uSalvar.disabled = false; }
+      };
+      conteudo.querySelectorAll('[data-editar-usuario]').forEach((b) => {
+        b.onclick = () => {
+          const u = cfg.usuarios.find((x) => x.usuario === b.dataset.editarUsuario);
+          document.getElementById('u-usuario').value = u.usuario;
+          document.getElementById('u-nome').value = u.nome;
+          document.getElementById('u-papel').value = u.papel;
+          document.getElementById('u-senha').value = '';
+          document.getElementById('u-senha').focus();
+        };
+      });
+      conteudo.querySelectorAll('[data-remover-usuario]').forEach((b) => {
+        b.onclick = async () => {
+          if (!await confirmar('Excluir o acesso de ' + b.dataset.removerUsuario + '? A pessoa sai do painel na hora.')) return;
+          try { await chamar('removerUsuario', b.dataset.removerUsuario); toast('Usuário removido'); render(); }
+          catch (err) { toast(err.message || String(err), true); }
+        };
+      });
+    }
     tgAcao('tg-conectar', () => chamar('conectarTelegram', document.getElementById('tg-token').value.trim()), 'Telegram conectado. Confira a mensagem no celular.');
     tgAcao('tg-adicionar', () => chamar('adicionarChatTelegram', document.getElementById('tg-id').value.trim()), 'Conectado. Confira a mensagem no Telegram.');
     tgAcao('tg-testar', () => chamar('testarTelegram'), 'Teste enviado. Confira o Telegram.');
@@ -1657,11 +1778,12 @@ setTimeout(function () {
   // Quem não é o responsável pelo painel (dono ou editor do projeto no
   // Google) não vê a aba Configurações e o painel abre direto em Compras.
   let restrito = false;
+  const ABAS_RESTRITO = ['compras', 'despesas'];
   let erroAoCarregar = '';
   function aplicarPapel(cfg) {
     restrito = !!(cfg && cfg.podeConfigurar === false);
-    const botao = document.querySelector('nav.abas button[data-aba="config"]');
-    if (botao) botao.hidden = restrito;
+    // Funcionária (sem acesso total): só Compras e Despesas.
+    document.querySelectorAll('nav.abas button').forEach((b) => { b.hidden = restrito && !ABAS_RESTRITO.includes(b.dataset.aba); });
   }
 
   function aplicarDados(d) {
@@ -1672,6 +1794,15 @@ setTimeout(function () {
   }
   async function recarregar() {
     aplicarDados(await chamar('carregarDados'));
+  }
+
+  if (!MODO_GOOGLE) {
+    if (!(login && login.token)) { telaLogin(''); return; }
+    const bs = document.createElement('button');
+    bs.id = 'btn-sair'; bs.className = 'sair'; bs.type = 'button';
+    bs.textContent = (login.nome ? login.nome.split(' ')[0] + ' · ' : '') + 'Sair';
+    bs.onclick = () => sair('');
+    document.querySelector('.topo-linha').append(bs);
   }
 
   // Se a planilha não responder, explica as causas mais comuns em vez de
@@ -1708,6 +1839,7 @@ setTimeout(function () {
     aplicarDados(d);
   }, (err) => {
     clearTimeout(demora);
+    if (!MODO_GOOGLE && !login) return; // login expirado: a tela de entrada já está aberta
     const msg = String(err && err.message || err);
     erroAoCarregar = msg.replace(/^.*SEM_ACESSO:\s*/, '').replace(/^Exception:\s*/, '');
     if (msg.includes('SEM_ACESSO')) toast(msg.replace(/^.*SEM_ACESSO:\s*/, ''), true);

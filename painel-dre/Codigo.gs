@@ -34,13 +34,22 @@ const PASTA_FOTOS = 'O Barracão - Notas fiscais';
 
 // Versão desta parte do código (a que fica colada no Google). A tela avisa
 // quando precisa de uma versão mais nova.
-const VERSAO_SERVIDOR = 7;
+const VERSAO_SERVIDOR = 8;
 
 // A tela do painel vem do GitHub a cada abertura, assim as melhorias chegam
 // sem precisar colar nada. Sem conexão com o GitHub, usa a cópia local "Painel".
 const URL_TELA = 'https://raw.githubusercontent.com/pontesgestao/controle-de-estoque-o-barracao/painel-dre/painel-dre/Painel.html';
 
+const URL_PAINEL_GITHUB = 'https://pontesgestao.github.io/controle-de-estoque-o-barracao/painel.html';
+
 function doGet() {
+  // Implantação "Executar como: Eu / Qualquer pessoa": quem não é o dono não
+  // tem conta Google reconhecida aqui e entra pela tela com usuário e senha.
+  if (!papelGoogle_()) {
+    return HtmlService.createHtmlOutput('<meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<p style="font:16px system-ui;padding:24px">Entre pelo painel com usuário e senha: <a href="' + URL_PAINEL_GITHUB + '" target="_top">abrir o Painel DRE</a>.</p>')
+      .setTitle('Painel DRE · O Barracão');
+  }
   let saida;
   try {
     const r = UrlFetchApp.fetch(URL_TELA, { muteHttpExceptions: true, headers: { 'Cache-Control': 'no-cache' } });
@@ -62,38 +71,31 @@ function planilha_() {
   try {
     return SpreadsheetApp.openById(id);
   } catch (e) {
-    throw new Error('SEM_ACESSO: a conta ' + (Session.getActiveUser().getEmail() || 'Google usada neste aparelho') +
+    throw new Error('SEM_ACESSO: a conta ' + ((CTX && CTX.nome) || 'Google usada neste aparelho') +
       ' não tem acesso à planilha "Estoque O Barracão". Peça ao responsável para compartilhar a planilha com ela como Editor.');
   }
 }
 
-// Só quem é dono ou editor deste projeto do Google muda as configurações
-// (planilha, chave da API, Telegram), para quem só usa o painel não trocar
-// a planilha ou a chave de todo mundo.
-function podeConfigurar_() {
-  try {
-    const eu = Session.getActiveUser().getEmail();
-    const arquivo = DriveApp.getFileById(ScriptApp.getScriptId());
-    return !!eu && (arquivo.getOwner().getEmail() === eu || arquivo.getEditors().some(function (u) { return u.getEmail() === eu; }));
-  } catch (e) {
-    return false;
-  }
-}
+// Só quem tem o papel "admin" (dono e sócio) muda as configurações
+// (planilha, chave da API, Telegram, usuários). O papel vem do login do
+// painel ou, no link antigo do Google, da conta Google (veja api()).
+function podeConfigurar_() { return !!(CTX && CTX.papel === 'admin'); }
 function exigirConfigurador_() {
   if (!podeConfigurar_()) throw new Error('Só o responsável pelo painel pode mudar as configurações.');
 }
 
-function obterConfig() {
+function obterConfig_() {
   const p = props_();
   let nome = '';
   if (p.getProperty('PLANILHA_ID')) {
     try { nome = planilha_().getName(); } catch (e) { nome = ''; }
   }
   return { planilha: nome, temPlanilha: !!nome, temChave: !!p.getProperty('ANTHROPIC_API_KEY'), telegram: estadoTelegram_(),
-    podeConfigurar: podeConfigurar_(), conta: Session.getActiveUser().getEmail() };
+    podeConfigurar: podeConfigurar_(), papel: CTX ? CTX.papel : '', conta: CTX ? CTX.nome : '',
+    modo: CTX ? CTX.modo : '', usuarios: podeConfigurar_() ? listarUsuarios_() : null };
 }
 
-function salvarConfig(cfg) {
+function salvarConfig_(cfg) {
   exigirConfigurador_();
   const p = props_();
   if (cfg.planilha) {
@@ -103,12 +105,187 @@ function salvarConfig(cfg) {
     p.setProperty('PLANILHA_ID', id);
   }
   if (cfg.chave) p.setProperty('ANTHROPIC_API_KEY', String(cfg.chave).trim());
-  return obterConfig();
+  return obterConfig_();
+}
+
+// ---------- Acesso: login do painel e chamadas da tela ----------
+//
+// A tela chama tudo por api(fn, args): pelo Google (google.script.run, no
+// link do Apps Script) ou pela internet (doPost, na tela hospedada no GitHub,
+// com o token do login). Nenhuma outra função fica exposta.
+
+let CTX = null; // { papel: 'admin' | 'compras', nome, usuario, modo: 'google' | 'senha' }
+
+// O que cada papel pode chamar. "compras" (funcionária): Compras e Despesas.
+const FUNCOES = {
+  obterConfig: 'compras', carregarDados: 'compras', criarProduto: 'compras',
+  lerNota: 'compras', salvarCompra: 'compras', excluirCompra: 'compras',
+  lerDespesa: 'compras', salvarDespesa: 'compras', excluirDespesa: 'compras',
+  salvarConfig: 'admin', salvarFaturamento: 'admin', salvarCusto: 'admin', alternarContagemIgnorada: 'admin',
+  lerBoleto: 'admin', salvarContas: 'admin', marcarContaPaga: 'admin', excluirConta: 'admin',
+  conectarTelegram: 'admin', adicionarChatTelegram: 'admin', desconectarTelegram: 'admin', ativarAvisoDiario: 'admin',
+  testarTelegram: 'admin', salvarUsuario: 'admin', removerUsuario: 'admin',
+};
+const IMPLEMENTACAO = {
+  obterConfig: function () { return obterConfig_(); }, carregarDados: function () { return carregarDados_(); },
+  criarProduto: criarProduto_, lerNota: lerNota_, salvarCompra: salvarCompra_, excluirCompra: excluirCompra_,
+  lerDespesa: lerDespesa_, salvarDespesa: salvarDespesa_, excluirDespesa: excluirDespesa_,
+  salvarConfig: salvarConfig_, salvarFaturamento: salvarFaturamento_, salvarCusto: salvarCusto_,
+  alternarContagemIgnorada: alternarContagemIgnorada_, lerBoleto: lerBoleto_, salvarContas: salvarContas_,
+  marcarContaPaga: marcarContaPaga_, excluirConta: excluirConta_, conectarTelegram: conectarTelegram_,
+  adicionarChatTelegram: adicionarChatTelegram_, desconectarTelegram: function () { return desconectarTelegram_(); },
+  ativarAvisoDiario: ativarAvisoDiario_, testarTelegram: function () { return testarTelegram_(); },
+  salvarUsuario: salvarUsuario_, removerUsuario: removerUsuario_,
+};
+
+/** Chamada pela tela aberta no link do Google (google.script.run). */
+function api(fn, args) {
+  const papel = papelGoogle_();
+  if (!papel) throw new Error('SEM_ACESSO: entre pelo painel com usuário e senha (' + URL_PAINEL_GITHUB + ').');
+  CTX = { papel: papel, nome: Session.getActiveUser().getEmail(), usuario: '', modo: 'google' };
+  return executar_(fn, args);
+}
+
+/** Chamada pela tela do GitHub: { acao: 'login', usuario, senha } ou { fn, args, token }. */
+function doPost(e) {
+  let resposta;
+  try {
+    const pedido = JSON.parse(e && e.postData ? e.postData.contents : '{}');
+    if (pedido.acao === 'login') {
+      resposta = { ok: true, resultado: entrar_(pedido.usuario, pedido.senha) };
+    } else {
+      const u = conferirToken_(pedido.token);
+      CTX = { papel: u.papel, nome: u.nome, usuario: u.usuario, modo: 'senha' };
+      resposta = { ok: true, resultado: executar_(pedido.fn, pedido.args) };
+    }
+  } catch (err) {
+    resposta = { ok: false, erro: String(err && err.message || err).replace(/^Exception:\s*/, '') };
+  }
+  return ContentService.createTextOutput(JSON.stringify(resposta)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function executar_(fn, args) {
+  const minimo = FUNCOES[fn];
+  if (!minimo || !IMPLEMENTACAO[fn]) throw new Error('Função desconhecida: ' + fn);
+  if (minimo === 'admin' && CTX.papel !== 'admin') throw new Error('Seu usuário não tem acesso a esta parte do painel.');
+  const r = IMPLEMENTACAO[fn].apply(null, Array.isArray(args) ? args : []);
+  // A funcionária não precisa ver faturamento nem contas a pagar.
+  if (fn === 'carregarDados' && CTX.papel !== 'admin') { r.faturamento = []; r.contas = []; }
+  return r;
+}
+
+// Papel de quem abriu o link do Google com a conta logada: dono ou editor
+// do projeto = admin; quem tem a planilha compartilhada = compras.
+function papelGoogle_() {
+  const eu = Session.getActiveUser().getEmail();
+  if (!eu) return null;
+  const tem = function (arquivo) {
+    return arquivo.getOwner().getEmail() === eu || arquivo.getEditors().some(function (u) { return u.getEmail() === eu; });
+  };
+  try { if (tem(DriveApp.getFileById(ScriptApp.getScriptId()))) return 'admin'; } catch (e) { /* sem acesso ao projeto */ }
+  try {
+    const id = props_().getProperty('PLANILHA_ID');
+    if (id && tem(DriveApp.getFileById(id))) return 'compras';
+  } catch (e) { /* sem acesso à planilha */ }
+  return null;
+}
+
+// ----- Usuários (guardados nas propriedades do script, senhas com hash) -----
+
+function usuarios_() { try { return JSON.parse(props_().getProperty('USUARIOS') || '[]'); } catch (e) { return []; } }
+function guardarUsuarios_(lista) { props_().setProperty('USUARIOS', JSON.stringify(lista)); }
+function listarUsuarios_() {
+  return usuarios_().map(function (u) { return { usuario: u.usuario, nome: u.nome, papel: u.papel }; });
+}
+function normalizarUsuario_(t) {
+  return String(t || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9._-]/g, '');
+}
+function hex_(bytes) { return bytes.map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join(''); }
+function hashSenha_(senha, sal) {
+  let h = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, sal + ':' + senha, Utilities.Charset.UTF_8);
+  for (let i = 0; i < 300; i++) h = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, hex_(h) + sal);
+  return hex_(h);
+}
+function segredo_() {
+  const p = props_();
+  let s = p.getProperty('SEGREDO_LOGIN');
+  if (!s) { s = Utilities.getUuid() + Utilities.getUuid(); p.setProperty('SEGREDO_LOGIN', s); }
+  return s;
+}
+function assinar_(texto) {
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(texto, segredo_())).replace(/=+$/, '');
+}
+
+/** Cria ou altera um usuário. Senha vazia mantém a atual. */
+function salvarUsuario_(d) {
+  const usuario = normalizarUsuario_(d.usuario);
+  if (usuario.length < 3) throw new Error('O usuário precisa de pelo menos 3 letras ou números.');
+  const papel = d.papel === 'admin' ? 'admin' : 'compras';
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const lista = usuarios_();
+    let u = lista.filter(function (x) { return x.usuario === usuario; })[0];
+    if (!u) {
+      if (!d.senha) throw new Error('Defina uma senha para o usuário novo.');
+      u = { usuario: usuario, versao: 0 };
+      lista.push(u);
+    }
+    if (d.senha) {
+      if (String(d.senha).length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres.');
+      u.sal = Utilities.getUuid();
+      u.hash = hashSenha_(String(d.senha), u.sal);
+      u.versao = (u.versao || 0) + 1; // derruba os logins antigos
+    }
+    if (u.papel && u.papel !== papel) u.versao = (u.versao || 0) + 1;
+    u.nome = String(d.nome || usuario).trim().slice(0, 60);
+    u.papel = papel;
+    if (CTX && CTX.modo === 'senha' && CTX.usuario === usuario && papel !== 'admin') throw new Error('Você não pode tirar o seu próprio acesso total.');
+    guardarUsuarios_(lista);
+  } finally {
+    lock.releaseLock();
+  }
+  return listarUsuarios_();
+}
+
+function removerUsuario_(usuario) {
+  usuario = normalizarUsuario_(usuario);
+  if (CTX && CTX.modo === 'senha' && CTX.usuario === usuario) throw new Error('Você não pode remover o seu próprio usuário.');
+  guardarUsuarios_(usuarios_().filter(function (u) { return u.usuario !== usuario; }));
+  return listarUsuarios_();
+}
+
+function entrar_(usuario, senha) {
+  usuario = normalizarUsuario_(usuario);
+  const cache = CacheService.getScriptCache();
+  const chaveTent = 'login-falhas-' + usuario;
+  const falhas = Number(cache.get(chaveTent) || 0);
+  if (falhas >= 5) throw new Error('Muitas tentativas erradas. Espere 15 minutos e tente de novo.');
+  const u = usuarios_().filter(function (x) { return x.usuario === usuario; })[0];
+  if (!u || hashSenha_(String(senha || ''), u.sal) !== u.hash) {
+    cache.put(chaveTent, String(falhas + 1), 15 * 60);
+    throw new Error('Usuário ou senha incorretos.');
+  }
+  cache.remove(chaveTent);
+  const corpo = Utilities.base64EncodeWebSafe(JSON.stringify({ u: u.usuario, v: u.versao, exp: Date.now() + 30 * 24 * 3600 * 1000 }), Utilities.Charset.UTF_8).replace(/=+$/, '');
+  return { token: corpo + '.' + assinar_(corpo), nome: u.nome, papel: u.papel };
+}
+
+function conferirToken_(token) {
+  const partes = String(token || '').split('.');
+  if (partes.length !== 2 || assinar_(partes[0]) !== partes[1]) throw new Error('LOGIN: entre de novo.');
+  let dados;
+  try { dados = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(partes[0] + '==='.slice((partes[0].length + 3) % 4))).getDataAsString('UTF-8')); }
+  catch (e) { throw new Error('LOGIN: entre de novo.'); }
+  if (!dados || dados.exp < Date.now()) throw new Error('LOGIN: o acesso expirou, entre de novo.');
+  const u = usuarios_().filter(function (x) { return x.usuario === dados.u; })[0];
+  if (!u || u.versao !== dados.v) throw new Error('LOGIN: entre de novo.');
+  return u;
 }
 
 // ---------- Leitura de tudo que o painel precisa ----------
 
-function carregarDados() {
+function carregarDados_() {
   const ss = planilha_();
   const tz = ss.getSpreadsheetTimeZone();
   const fmt = function (d, padrao) {
@@ -204,7 +381,7 @@ function lerContagens_(valores, fmt) {
 
 // Faturamento do período: salão + iFood. A coluna "Faturamento (R$)" guarda o
 // total (é ela que entra no CMV %); as duas últimas, cada parte.
-function salvarFaturamento(f) {
+function salvarFaturamento_(f) {
   const ss = planilha_();
   const aba = aba_(ss, ABA_FATURAMENTO, CAB_FATURAMENTO);
   // Aba criada antes das colunas Salão/iFood: completa o cabeçalho.
@@ -228,7 +405,7 @@ function salvarFaturamento(f) {
   return true;
 }
 
-function salvarCusto(c) {
+function salvarCusto_(c) {
   const aba = aba_(planilha_(), ABA_CUSTOS, CAB_CUSTOS);
   aba.appendRow([texto_(c.categoria), texto_(c.produto), Number(c.custo), c.desde ? new Date(c.desde + 'T12:00:00') : new Date(),
     'Manual', '', new Date()]);
@@ -236,7 +413,7 @@ function salvarCusto(c) {
 }
 
 // Cadastra um produto que ainda não existe na contagem (vindo de uma nota).
-function criarProduto(p) {
+function criarProduto_(p) {
   const categoria = String(p.categoria || '').trim();
   const produto = String(p.produto || '').trim();
   if (!categoria || !produto) throw new Error('Informe a categoria e o nome do produto.');
@@ -248,7 +425,7 @@ function criarProduto(p) {
   return { categoria: categoria, produto: produto };
 }
 
-function alternarContagemIgnorada(c) {
+function alternarContagemIgnorada_(c) {
   const aba = aba_(planilha_(), ABA_IGNORADAS, CAB_IGNORADAS);
   const valores = aba.getDataRange().getValues();
   for (let i = valores.length - 1; i >= 1; i--) {
@@ -262,7 +439,7 @@ function alternarContagemIgnorada(c) {
  * Grava uma compra: uma linha por item, as fotos/PDFs no Google Drive e, para
  * cada item de estoque, o novo custo por unidade (última compra).
  */
-function salvarCompra(compra) {
+function salvarCompra_(compra) {
   const ss = planilha_();
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -313,7 +490,7 @@ function salvarCompra(compra) {
   }
 }
 
-function excluirCompra(id) {
+function excluirCompra_(id) {
   const ss = planilha_();
   [[ABA_COMPRAS, CAB_COMPRAS, 0], [ABA_CUSTOS, CAB_CUSTOS, 5]].forEach(function (a) {
     const aba = aba_(ss, a[0], a[1]);
@@ -331,7 +508,7 @@ function excluirCompra(id) {
 // custos nem CMV.
 
 /** Lê a nota de uma despesa: fornecedor, data, total e um resumo dos itens. */
-function lerDespesa(fotos, categorias) {
+function lerDespesa_(fotos, categorias) {
   const instrucoes =
     'Você lê fotos e PDFs de notas fiscais, cupons fiscais e recibos brasileiros de DESPESAS de um restaurante ' +
     '(O Barracão): gás, depósito, material de construção, manutenção, utensílios e outras compras que não são ' +
@@ -376,7 +553,7 @@ function lerDespesa(fotos, categorias) {
   return chamarIA_(instrucoes, conteudo, esquema, 'a nota');
 }
 
-function salvarDespesa(d) {
+function salvarDespesa_(d) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d.dia))) throw new Error('Informe a data da despesa.');
   const valor = Number(d.valor);
   if (!isFinite(valor) || valor <= 0) throw new Error('Informe o valor da despesa.');
@@ -404,14 +581,14 @@ function salvarDespesa(d) {
     }
     const aba = aba_(ss, ABA_DESPESAS, CAB_DESPESAS);
     aba.appendRow([id, new Date(d.dia + 'T12:00:00'), texto_(d.loja), texto_(d.fornecedor), texto_(d.documento),
-      texto_(d.categoria), texto_(d.descricao), valor, arquivo, new Date(), Session.getActiveUser().getEmail() || '']);
+      texto_(d.categoria), texto_(d.descricao), valor, arquivo, new Date(), CTX ? CTX.nome : '']);
     return { id: id, avisoFotos: avisoFotos };
   } finally {
     lock.releaseLock();
   }
 }
 
-function excluirDespesa(id) {
+function excluirDespesa_(id) {
   const aba = aba_(planilha_(), ABA_DESPESAS, CAB_DESPESAS);
   const valores = aba.getDataRange().getValues();
   for (let i = valores.length - 1; i >= 1; i--) {
@@ -423,7 +600,7 @@ function excluirDespesa(id) {
 // ---------- Contas a pagar (boletos) ----------
 
 /** Lê boletos (foto ou PDF; um PDF pode ter vários, como um carnê). */
-function lerBoleto(fotos) {
+function lerBoleto_(fotos) {
   const instrucoes =
     'Você lê fotos e PDFs de boletos bancários brasileiros recebidos por um restaurante (O Barracão) ' +
     'e extrai os dados para a lista de contas a pagar. Um arquivo pode ter mais de um boleto (carnê, parcelas): ' +
@@ -470,7 +647,7 @@ function lerBoleto(fotos) {
 }
 
 /** Grava uma ou mais contas. lote: { contas: [...], fotos: [...] }. */
-function salvarContas(lote) {
+function salvarContas_(lote) {
   const ss = planilha_();
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -510,7 +687,7 @@ function salvarContas(lote) {
 }
 
 /** Marca (ou desmarca) uma conta como paga. */
-function marcarContaPaga(id, paga) {
+function marcarContaPaga_(id, paga) {
   const aba = aba_(planilha_(), ABA_CONTAS, CAB_CONTAS);
   const valores = aba.getDataRange().getValues();
   for (let i = 1; i < valores.length; i++) {
@@ -523,7 +700,7 @@ function marcarContaPaga(id, paga) {
   throw new Error('Conta não encontrada. Recarregue o painel.');
 }
 
-function excluirConta(id) {
+function excluirConta_(id) {
   const aba = aba_(planilha_(), ABA_CONTAS, CAB_CONTAS);
   const valores = aba.getDataRange().getValues();
   for (let i = valores.length - 1; i >= 1; i--) {
@@ -561,7 +738,7 @@ function telegram_(metodo, dados) {
  * Guarda o token (se vier) e cadastra quem mandou mensagem para o robô.
  * Cada pessoa que vai receber o aviso manda /start para o robô antes.
  */
-function conectarTelegram(token) {
+function conectarTelegram_(token) {
   exigirConfigurador_();
   const p = props_();
   if (token) {
@@ -600,7 +777,7 @@ function conectarTelegram(token) {
  * mostra), sem depender das mensagens guardadas no robô. A pessoa precisa
  * ter apertado Iniciar no robô antes.
  */
-function adicionarChatTelegram(id) {
+function adicionarChatTelegram_(id) {
   exigirConfigurador_();
   const chatId = Number(String(id || '').replace(/[^\d-]/g, ''));
   if (!chatId) throw new Error('Digite o número (Id) que o @userinfobot mostrou.');
@@ -619,16 +796,16 @@ function adicionarChatTelegram(id) {
   return estadoTelegram_();
 }
 
-function desconectarTelegram() {
+function desconectarTelegram_() {
   exigirConfigurador_();
   const p = props_();
   p.deleteProperty('TELEGRAM_CHATS');
-  ativarAvisoDiario(-1);
+  ativarAvisoDiario_(-1);
   return estadoTelegram_();
 }
 
 /** Liga o aviso diário na hora pedida (fuso da planilha), ou desliga com -1. */
-function ativarAvisoDiario(hora) {
+function ativarAvisoDiario_(hora) {
   exigirConfigurador_();
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'avisarVencimentos') ScriptApp.deleteTrigger(t);
@@ -687,7 +864,7 @@ function avisarVencimentos(teste) {
   return grupos.length;
 }
 
-function testarTelegram() { avisarVencimentos(true); return true; }
+function testarTelegram_() { avisarVencimentos(true); return true; }
 
 // ---------- Leitura da nota com IA ----------
 
@@ -696,7 +873,7 @@ function testarTelegram() { avisarVencimentos(true); return true; }
  * associados aos produtos do catálogo da contagem.
  * catalogo: lista de "Categoria | Produto" (o índice é usado na resposta).
  */
-function lerNota(fotos, catalogo) {
+function lerNota_(fotos, catalogo) {
   const chave = props_().getProperty('ANTHROPIC_API_KEY');
   if (!chave) throw new Error('Cadastre a chave da API na aba Configurações.');
 
@@ -867,7 +1044,7 @@ function pastaFotos_() {
 function guardarArquivo_(pasta, blob, ss) {
   const arq = pasta.createFile(blob);
   try {
-    const eu = Session.getActiveUser().getEmail();
+    const eu = Session.getEffectiveUser().getEmail();
     const plan = DriveApp.getFileById(ss.getId());
     const pessoas = [plan.getOwner()].concat(plan.getEditors()).map(function (x) { return x && x.getEmail(); })
       .filter(function (e, i, a) { return e && e !== eu && a.indexOf(e) === i; });

@@ -1603,7 +1603,8 @@ setTimeout(function () {
   async function telaConfig() {
     conteudo.innerHTML = '<div class="vazio"><span class="carregando escuro"></span></div>';
     let cfg = { temPlanilha: false, temChave: false, planilha: '' };
-    try { cfg = await chamar('obterConfig'); } catch (e) { /* mostra o formulário vazio */ }
+    let erroCfg = '';
+    try { cfg = await chamar('obterConfig'); } catch (e) { erroCfg = String(e && e.message || e); }
     if (cfg.podeConfigurar === false) {
       aplicarPapel(cfg);
       // Sem os dados do painel, mostra o erro e o botão de recarregar, e não
@@ -1624,6 +1625,7 @@ setTimeout(function () {
     conteudo.innerHTML = `
       <div class="cartao" style="max-width:640px">
         <h2>Configurações</h2>
+        ${erroCfg ? `<p class="alerta erro" style="margin-bottom:12px"><strong>Não consegui ler as configurações</strong>${esc(erroCfg)} · versão do código no Google: ${esc(String((dados && dados.versaoServidor) || '?'))} · ${MODO_GOOGLE ? (typeof google.script.run.api === 'function' ? 'com login' : 'sem login') : 'GitHub'}</p>` : ''}
         <p class="dica">Estes dados ficam guardados só no seu projeto do Google. A chave da API nunca aparece no painel.</p>
         <label class="campo" style="margin-bottom:14px">Link da planilha "Estoque O Barracão"
           <input type="text" id="cfg-planilha" placeholder="https://docs.google.com/spreadsheets/d/…">

@@ -118,13 +118,13 @@ function salvarConfig_(cfg) {
 
 let CTX = null; // { papel: 'admin' | 'compras', nome, usuario, modo: 'google' | 'senha' }
 
-// O que cada papel pode chamar. "compras" (funcionária): Compras e Despesas.
+// O que cada papel pode chamar. "compras" (funcionária): Compras, Despesas e Contas a pagar.
 const FUNCOES = {
   obterConfig: 'compras', carregarDados: 'compras', criarProduto: 'compras',
   lerNota: 'compras', salvarCompra: 'compras', excluirCompra: 'compras',
   lerDespesa: 'compras', salvarDespesa: 'compras', excluirDespesa: 'compras',
+  lerBoleto: 'compras', salvarContas: 'compras', marcarContaPaga: 'compras', excluirConta: 'compras',
   salvarConfig: 'admin', salvarFaturamento: 'admin', salvarCusto: 'admin', alternarContagemIgnorada: 'admin',
-  lerBoleto: 'admin', salvarContas: 'admin', marcarContaPaga: 'admin', excluirConta: 'admin',
   conectarTelegram: 'admin', adicionarChatTelegram: 'admin', desconectarTelegram: 'admin', ativarAvisoDiario: 'admin',
   testarTelegram: 'admin', salvarUsuario: 'admin', removerUsuario: 'admin',
   carregarEquipe: 'admin', salvarItemEquipe: 'admin', excluirItemEquipe: 'admin',
@@ -173,8 +173,8 @@ function executar_(fn, args) {
   if (!minimo || !IMPLEMENTACAO[fn]) throw new Error('Função desconhecida: ' + fn);
   if (minimo === 'admin' && CTX.papel !== 'admin') throw new Error('Seu usuário não tem acesso a esta parte do painel.');
   const r = IMPLEMENTACAO[fn].apply(null, Array.isArray(args) ? args : []);
-  // A funcionária não precisa ver faturamento nem contas a pagar.
-  if (fn === 'carregarDados' && CTX.papel !== 'admin') { r.faturamento = []; r.contas = []; }
+  // A funcionária não vê o faturamento.
+  if (fn === 'carregarDados' && CTX.papel !== 'admin') r.faturamento = [];
   return r;
 }
 

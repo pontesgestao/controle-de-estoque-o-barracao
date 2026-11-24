@@ -1361,7 +1361,7 @@ setTimeout(function () {
         <div class="kpi semana"><div class="rotulo">Próximos 7 dias</div><div class="valor num">${dinheiro(soma(daSemana))}</div><div class="detalhe">${daSemana.length} conta${daSemana.length === 1 ? '' : 's'}</div></div>
         <div class="kpi destaque"><div class="rotulo">Total a pagar</div><div class="valor num">${dinheiro(soma(aPagar))}</div><div class="detalhe">${aPagar.length} conta${aPagar.length === 1 ? '' : 's'}</div></div>
       </div>
-      ${tg.ativo ? '' : `<p class="alerta" style="margin-bottom:16px"><strong>Aviso no Telegram desligado</strong>Ligue em <button class="btn-texto" id="ir-config" style="padding:0">Configurações</button> para receber as contas do dia no celular.</p>`}
+      ${tg.ativo || restrito ? '' : `<p class="alerta" style="margin-bottom:16px"><strong>Aviso no Telegram desligado</strong>Ligue em <button class="btn-texto" id="ir-config" style="padding:0">Configurações</button> para receber as contas do dia no celular.</p>`}
 
       <div class="cartao">
         <h2>Lançar boleto</h2>
@@ -1639,7 +1639,7 @@ setTimeout(function () {
       <div class="cartao" style="max-width:640px" id="cfg-usuarios">
         <h2>Usuários do painel</h2>
         <p class="dica">Quem entra pelo endereço <strong>pontesgestao.github.io/controle-de-estoque-o-barracao/painel.html</strong>, com usuário e senha.
-          <b>Acesso total</b> vê tudo e muda configurações. <b>Compras</b> só lança compras e despesas.</p>
+          <b>Acesso total</b> vê tudo e muda configurações. <b>Compras</b> lança compras, despesas e contas a pagar.</p>
         ${cfg.usuarios.length ? `<div class="tabela-wrap"><table>
           <thead><tr><th>Usuário</th><th>Nome</th><th>Acesso</th><th></th></tr></thead>
           <tbody>${cfg.usuarios.map((u) => `<tr><td><strong>${esc(u.usuario)}</strong></td><td>${esc(u.nome)}</td>
@@ -1780,11 +1780,11 @@ setTimeout(function () {
   // Quem não é o responsável pelo painel (dono ou editor do projeto no
   // Google) não vê a aba Configurações e o painel abre direto em Compras.
   let restrito = false;
-  const ABAS_RESTRITO = ['compras', 'despesas'];
+  const ABAS_RESTRITO = ['compras', 'despesas', 'contas'];
   let erroAoCarregar = '';
   function aplicarPapel(cfg) {
     restrito = !!(cfg && cfg.podeConfigurar === false);
-    // Funcionária (sem acesso total): só Compras e Despesas.
+    // Funcionária (sem acesso total): só Compras, Despesas e Contas a pagar.
     document.querySelectorAll('nav.abas button').forEach((b) => { b.hidden = restrito && !ABAS_RESTRITO.includes(b.dataset.aba); });
   }
 
